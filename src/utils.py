@@ -48,13 +48,16 @@ def reconstruction_loss(x, x_recon, distribution):
 def kl_divergence(mu, logvar):
     batch_size = mu.size(0)
     assert batch_size != 0
-    if mu.data.ndimension() == 4:
-        mu = mu.view(mu.size(0), mu.size(1))
-    if logvar.data.ndimension() == 4:
-        logvar = logvar.view(logvar.size(0), logvar.size(1))
 
-    klds = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
-    total_kld = klds.sum(1).mean(0, True)
+    # mu B, len(latent_vector)
+
+    # if mu.data.ndimension() == 4:
+    #     mu = mu.view(mu.size(0), mu.size(1))
+    # if logvar.data.ndimension() == 4:
+    #     logvar = logvar.view(logvar.size(0), logvar.size(1)) #Batch size,
+
+    klds = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()) #shape (B, latent vector)
+    total_kld = klds.sum(1).mean(0, True) #latent vector, mean over B
     dimension_wise_kld = klds.mean(0)
     mean_kld = klds.mean(1).mean(0, True)
 

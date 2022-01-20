@@ -9,5 +9,5 @@
 # your code goes below
 module load python/3.8.6
 source ../thesis_env/bin/activate
-python train_hierarchical.py --gpus 1 --max_steps 200000 --gamma 1.5 --delta 5 --zeta 1.0 --dataset boxhead
+python train_hierarchical.py --gpus 1 --max_steps 400000 --gamma 1 --delta 5 --zeta 1.0 --dataset boxhead
 
