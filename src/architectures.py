@@ -21,7 +21,6 @@ class VAEh(pl.LightningModule):
         self.C_min = torch.FloatTensor([C_min]).cuda()
         self.C_max = torch.FloatTensor([C_max]).cuda()
 
-
         self.automatic_optimization = False  # turn off pytorch optimizer
 
         # model architecture
@@ -93,7 +92,8 @@ class VAEh(pl.LightningModule):
 class VAEhier(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim_level0=12, latent_dim_level1=9, input_height=64, nc=1,
                  hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta=0.8, delta=0.001,
-                 max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5):
+                 max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
+                 loss_function='bvae'):
         super().__init__()
         self.latent_dim_level0 = latent_dim_level0
         self.latent_dim_level1 = latent_dim_level1
@@ -112,6 +112,7 @@ class VAEhier(pl.LightningModule):
         # needs to be converted to FloatTensor on cuda
         self.C_min = torch.FloatTensor([C_min]).cuda()
         self.C_max = torch.FloatTensor([C_max]).cuda()
+        self.loss_function = loss_function
 
         self.automatic_optimization = False
         # nr of channels in image
@@ -177,24 +178,56 @@ class VAEhier(pl.LightningModule):
 
         total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
 
-        # Calculate hier level 1 KL to level 0
-        # hier_kl = []
-        # hier_indices = self.encoder.mu_indices
-
-        # for idx, indices in enumerate(hier_indices):
-        #   indices_torch = indices.clone().detach().cuda()
-        #   idx_torch = torch.tensor(idx).cuda()
-        #   hier_kl.append(kl(torch.index_select(mu, 1, indices_torch), torch.index_select(logvar,1,indices_torch), torch.index_select(mu_hier,1,idx_torch), torch.index_select(logvar_hier,1,idx_torch)))
-
-        # stacked_hier_kl = torch.stack(hier_kl)
-        # total_kld_hier = torch.sum(stacked_hier_kl)
-
         total_kld_hier, hier_kl, _ = kl_divergence(mu_hier, logvar_hier)
 
         # calculate C value
         C = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter, self.C_min, self.C_max.data[0])
-        beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier +\
-                        self.delta * self.gamma * (total_kld_hier - 1 * C).abs()
+
+        if self.loss_function == 'bvae':
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * self.gamma * (total_kld_hier - 1 * C).abs()
+
+        if self.loss_function == 'bvae_anneal_level0':
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * (total_kld_hier).abs()
+
+        if self.loss_function == 'bvae_KL_layers':
+            # Calculate hier level 1 KL to level 0
+            hier_kl = []
+            hier_indices = self.encoder.mu_indices
+
+            for idx, indices in enumerate(hier_indices):
+                indices_torch = indices.clone().detach().cuda()
+                idx_torch = torch.tensor(idx).cuda()
+                hier_kl.append(
+                    kl(torch.index_select(mu, 1, indices_torch), torch.index_select(logvar, 1, indices_torch),
+                       torch.index_select(mu_hier, 1, idx_torch), torch.index_select(logvar_hier, 1, idx_torch)))
+
+            stacked_hier_kl = torch.stack(hier_kl)
+            kl_layers = torch.sum(stacked_hier_kl)
+
+            # get loss
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + self.delta * kl_layers
+
+        if self.loss_function == 'bvae_KL_layers_only':
+            # Calculate hier level 1 KL to level 0
+            hier_kl = []
+            hier_indices = self.encoder.mu_indices
+
+            for idx, indices in enumerate(hier_indices):
+                indices_torch = indices.clone().detach().cuda()
+                idx_torch = torch.tensor(idx).cuda()
+                hier_kl.append(
+                    kl(torch.index_select(mu, 1, indices_torch), torch.index_select(logvar, 1, indices_torch),
+                       torch.index_select(mu_hier, 1, idx_torch), torch.index_select(logvar_hier, 1, idx_torch)))
+
+            stacked_hier_kl = torch.stack(hier_kl)
+            kl_layers = torch.sum(stacked_hier_kl)
+
+            # get loss
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * kl_layers.abs()
 
         beta_vae_loss.backward()
         opt.step()

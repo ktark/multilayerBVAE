@@ -25,7 +25,8 @@ def main(hparams):
                   latent_dim_level1=int(hparams.latent_dim_level1), C_max=float(hparams.C_max),
                   C_min=float(hparams.C_min), gamma=float(hparams.gamma),
                   zeta=float(hparams.zeta), delta=float(hparams.delta),
-                  C_stop_iter=int(hparams.C_stop_iter), hier_groups=hparams.hier_groups)
+                  C_stop_iter=int(hparams.C_stop_iter), hier_groups=hparams.hier_groups,
+                  loss_function=hparams.loss_function)
 
     wandb_logger = WandbLogger(
         name=f'Hierarchy: ds {hparams.dataset} | '
@@ -34,7 +35,8 @@ def main(hparams):
              f'latents: {str(hparams.latent_dim_level0)}/{str(hparams.latent_dim_level1)} |'
              f'hier recon: {str(hparams.zeta)} |'
              f'hier KL: {str(hparams.delta)} |'
-             f'steps: {str(hparams.max_steps)}',
+             f'steps: {str(hparams.max_steps)}|'
+             f'loss: {hparams.loss_function}',
         project='thesis', job_type='train', log_model=False)
 
     wandb_logger.watch(vae, log_freq=1000)  # log network topology and weights
@@ -68,7 +70,8 @@ if __name__ == "__main__":
     parser.add_argument("--zeta", default=0)  # hierarchy reconstrunction
     parser.add_argument("--latent_dim_level1", default=12)  # latent_dim level 1
     parser.add_argument("--latent_dim_level0", default=48)  # latent_dim level 0
-    parser.add_argument("--hier_groups", default=[4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])  # hierarchy reconstrunction
+    parser.add_argument("--hier_groups", nargs="*", type=int, default=[4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])  # hierarchy reconstrunction
+    parser.add_argument("--loss_function", default="bvae")
     parser.add_argument("--dataset", default="boxhead2")  # dataset
 
     args = parser.parse_args()
