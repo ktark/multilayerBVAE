@@ -38,13 +38,10 @@ class CelebA(Dataset):
 
 
 class BoxHead(Dataset):
-    def __init__(self, mode='large'):
+    def __init__(self, dataset='boxheadsimple2'):
         # read boxhead datasets from hdf5 and make a np array
         workdir = os.getcwd()
-        if mode == 'test':
-            path = workdir + '/dataset/boxhead_test/'
-        else:
-            path = workdir + '/dataset/boxhead/'
+        path = workdir + '/dataset/'+dataset+'/'
         filenames = [f for f in listdir(path) if isfile(join(path, f))]
 
         all_images_in_batch = []

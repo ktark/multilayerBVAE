@@ -93,7 +93,7 @@ class VAEhier(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim_level0=12, latent_dim_level1=9, input_height=64, nc=1,
                  hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta=0.8, delta=0.001,
                  max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
-                 loss_function='bvae'):
+                 loss_function='bvae', level0_training_start_iter=0):
         super().__init__()
         self.latent_dim_level0 = latent_dim_level0
         self.latent_dim_level1 = latent_dim_level1
@@ -113,6 +113,9 @@ class VAEhier(pl.LightningModule):
         self.C_min = torch.FloatTensor([C_min]).cuda()
         self.C_max = torch.FloatTensor([C_max]).cuda()
         self.loss_function = loss_function
+        self.level0_training_start_iter = torch.tensor(level0_training_start_iter)
+        self.level0_beta_vae = 0
+
 
         self.automatic_optimization = False
         # nr of channels in image
@@ -187,9 +190,31 @@ class VAEhier(pl.LightningModule):
             beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
                             self.delta * self.gamma * (total_kld_hier - 1 * C).abs()
 
+        if self.loss_function == 'bvae_l1_first':
+            level0_anneal = 0
+
+            if self.trainer.global_step > self.level0_training_start_iter.item():
+
+                anneal_coef = (self.trainer.global_step - self.level0_training_start_iter) / (
+                            self.level0_training_start_iter + 1)
+                level0_anneal = torch.clamp(anneal_coef, torch.tensor([0]).item(), torch.tensor([1]).item())
+                self.level0_beta_vae = (recon_loss + self.gamma * (total_kld - C).abs()) * level0_anneal
+            else:
+                level0_beta_vae = 0
+            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * self.gamma * (total_kld_hier - C).abs()
+            beta_vae_loss = level0_beta_vae + level1_beta_vae
+
+        if self.loss_function == 'bvae_l1_first_recon':
+            if self.global_iter > self.level0_training_start_iter:
+                level0_beta_vae = recon_loss + self.gamma * (total_kld - C).abs()
+            else:
+                level0_beta_vae = recon_loss
+            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * self.gamma * (total_kld_hier - C).abs()
+            beta_vae_loss = level0_beta_vae + level1_beta_vae
+
         if self.loss_function == 'bvae_anneal_level0':
             beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * (total_kld_hier).abs()
+                            self.delta * total_kld_hier.abs()
 
         if self.loss_function == 'bvae_KL_layers':
             # Calculate hier level 1 KL to level 0

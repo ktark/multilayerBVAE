@@ -18,7 +18,7 @@ def main(hparams):
     wandb.login()
     pl.seed_everything(2, workers=True)
     print(hparams)
-    ds = BoxHead()
+    ds = BoxHead(dataset=hparams.dataset)
     ds_dl = DataLoader(ds, batch_size=64, shuffle=True, num_workers=8, persistent_workers=True, worker_init_fn=np.random.seed(0))
 
     vae = VAEhier(nc=3, decoder_dist='gaussian', latent_dim_level0=int(hparams.latent_dim_level0),
@@ -26,7 +26,7 @@ def main(hparams):
                   C_min=float(hparams.C_min), gamma=float(hparams.gamma),
                   zeta=float(hparams.zeta), delta=float(hparams.delta),
                   C_stop_iter=int(hparams.C_stop_iter), hier_groups=hparams.hier_groups,
-                  loss_function=hparams.loss_function)
+                  loss_function=hparams.loss_function, level0_training_start_iter=int(hparams.level0_training_start_iter))
 
     wandb_logger = WandbLogger(
         name=f'Hierarchy: ds {hparams.dataset} | '
@@ -36,6 +36,7 @@ def main(hparams):
              f'hier recon: {str(hparams.zeta)} |'
              f'hier KL: {str(hparams.delta)} |'
              f'steps: {str(hparams.max_steps)}|'
+             f'l0_start: {str(hparams.level0_training_start_iter)}|'
              f'loss: {hparams.loss_function}',
         project='thesis', job_type='train', log_model=False)
 
@@ -73,6 +74,7 @@ if __name__ == "__main__":
     parser.add_argument("--hier_groups", nargs="*", type=int, default=[4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4])  # hierarchy reconstrunction
     parser.add_argument("--loss_function", default="bvae")
     parser.add_argument("--dataset", default="boxhead2")  # dataset
+    parser.add_argument("--level0_training_start_iter", default=0)
 
     args = parser.parse_args()
 
