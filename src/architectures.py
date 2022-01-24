@@ -115,6 +115,9 @@ class VAEhier(pl.LightningModule):
         self.loss_function = loss_function
         self.level0_training_start_iter = torch.tensor(level0_training_start_iter)
         self.level0_beta_vae = 0
+        self.l1_regularization = 0.0001
+        self.dim_wise_kld = []
+        self.hier_kl = []
 
 
         self.automatic_optimization = False
@@ -163,7 +166,8 @@ class VAEhier(pl.LightningModule):
         return x_recon, mu, logvar, x_recon_hier, mu_hier, logvar_hier
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        #return torch.optim.Adam(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        return torch.optim.Adamax(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
 
     def training_step(self, batch, batch_idx):
         batch_size = batch.size(dim=0)
@@ -186,30 +190,31 @@ class VAEhier(pl.LightningModule):
         # calculate C value
         C = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter, self.C_min, self.C_max.data[0])
 
+        #level 0 annealing
+        C_anneal_level0 = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter-(self.C_max*(self.level0_training_start_iter/self.C_stop_iter)), self.C_min, self.C_max.data[0])
+        anneal_coef = (self.trainer.global_step - self.level0_training_start_iter) / (
+                self.level0_training_start_iter + 1)
+        level0_anneal = torch.clamp(anneal_coef, torch.tensor([0]).item(), torch.tensor([1]).item())
+
         if self.loss_function == 'bvae':
             beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * self.gamma * (total_kld_hier - 1 * C).abs()
+                            self.delta * total_kld_hier.abs()
 
         if self.loss_function == 'bvae_l1_first':
-            level0_anneal = 0
 
             if self.trainer.global_step > self.level0_training_start_iter.item():
-
-                anneal_coef = (self.trainer.global_step - self.level0_training_start_iter) / (
-                            self.level0_training_start_iter + 1)
-                level0_anneal = torch.clamp(anneal_coef, torch.tensor([0]).item(), torch.tensor([1]).item())
-                self.level0_beta_vae = (recon_loss + self.gamma * (total_kld - C).abs()) * level0_anneal
+                self.level0_beta_vae = (recon_loss + self.gamma * (total_kld - C_anneal_level0).abs()) * level0_anneal
             else:
-                level0_beta_vae = 0
-            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * self.gamma * (total_kld_hier - C).abs()
-            beta_vae_loss = level0_beta_vae + level1_beta_vae
+                self.level0_beta_vae = 0
+            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * total_kld_hier.abs()
+            beta_vae_loss = self.level0_beta_vae + level1_beta_vae
 
         if self.loss_function == 'bvae_l1_first_recon':
-            if self.global_iter > self.level0_training_start_iter:
-                level0_beta_vae = recon_loss + self.gamma * (total_kld - C).abs()
+            if self.trainer.global_step > self.level0_training_start_iter:
+                level0_beta_vae = recon_loss + self.gamma * (total_kld - C_anneal_level0).abs() * level0_anneal
             else:
                 level0_beta_vae = recon_loss
-            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * self.gamma * (total_kld_hier - C).abs()
+            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * total_kld_hier.abs()
             beta_vae_loss = level0_beta_vae + level1_beta_vae
 
         if self.loss_function == 'bvae_anneal_level0':
@@ -250,9 +255,13 @@ class VAEhier(pl.LightningModule):
             stacked_hier_kl = torch.stack(hier_kl)
             kl_layers = torch.sum(stacked_hier_kl)
 
+            #L1 regularization for additinal layers
+            l1_loss_additional = (sum(torch.sum(p.abs()) for p in self.encoder.additional_encoders.parameters()))
+
             # get loss
+
             beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * kl_layers.abs()
+                            self.delta * kl_layers.abs() + self.l1_regularization*l1_loss_additional
 
         beta_vae_loss.backward()
         opt.step()
@@ -264,7 +273,8 @@ class VAEhier(pl.LightningModule):
             'C': C,
             'iter': self.global_iter,
             'kl_hier_total': total_kld_hier,
-            'recon_loss_hier': recon_loss_hier
+            'recon_loss_hier': recon_loss_hier,
+            'C_anneal_level0' : C_anneal_level0
         }
         for idx, val in enumerate(dim_wise_kld):
             logs['kl_' + str(idx)] = val
@@ -278,6 +288,8 @@ class VAEhier(pl.LightningModule):
             logs,
             on_step=True, on_epoch=False, prog_bar=True, logger=True
         )
+        self.dim_wise_kld = dim_wise_kld
+        self.hier_kl = hier_kl
 
         return beta_vae_loss
 

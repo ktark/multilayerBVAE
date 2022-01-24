@@ -27,8 +27,9 @@ class Dsprites(Dataset):
 
 class CelebA(Dataset):
     def __init__(self):
+        workdir = os.getcwd()
         self.transforms = transforms.Compose([transforms.Resize((64, 64)), transforms.ToTensor()])
-        self.train_data = datasets.ImageFolder('CelebA/')
+        self.train_data = datasets.ImageFolder(workdir+'/dataset/CelebA/')
 
     def __getitem__(self, i):
         return self.transforms(self.train_data[i][0])

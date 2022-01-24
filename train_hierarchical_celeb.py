@@ -18,7 +18,7 @@ def main(hparams):
     wandb.login()
     pl.seed_everything(2, workers=True)
     print(hparams)
-    ds = BoxHead(dataset=hparams.dataset)
+    ds = CelebA()
     ds_dl = DataLoader(ds, batch_size=64, shuffle=True, num_workers=8, persistent_workers=True,
                        worker_init_fn=np.random.seed(0))
 
