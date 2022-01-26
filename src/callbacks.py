@@ -354,7 +354,7 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
             recon_loss_between_layers_list = []
             for i in np.arange(0, level1, 1):
                 for check in check_levels:
-                    z_img = copy.deepcopy(level0_zero_img)
+                    z_img = copy.deepcopy(level1_zero_img)
                     z_img[0, i] = check
 
                     # hier reconstr
