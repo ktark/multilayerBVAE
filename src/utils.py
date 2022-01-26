@@ -102,7 +102,7 @@ def normal_init(m, mean, std):
 
 def latent_layer_reconstruction(pl_module):
     # Bring the tensors to CPU
-    pl_module.eval()
+    #pl_module.eval()
     # pl_module.cuda()
     zero_image = torch.zeros((1, 1, 64, 64)).float().cuda()
     level0 = pl_module.latent_dim_level0

@@ -374,10 +374,10 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
                     recon_loss_between_layers = F.mse_loss(reconst_z1_sigm.cpu(), reconst_z0_sigm.cpu())
 
                     print_images.append(nn.functional.pad(reconst_z0_sigm, pad=[4, 4, 4, 4], value=1.0))
-                    print_images.append(create_text_image(str(i) + ": "+str(recon_loss_between_layers.item())))
+                    print_images.append(torch.from_numpy(create_text_image(str(i) + ": "+str(recon_loss_between_layers.item()))))
             merged_image_cat = torch.cat(print_images, dim=0).cpu()
             merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=3, pad_value=1)
-            self.wandb_logger.log_image('train_images/latent_info_merged_' + str(self.sample),
+            self.wandb_logger.log_image('train_images/latent_info_merged',
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
 
