@@ -157,13 +157,7 @@ class HierInitialEncoder(nn.Module):
         self.additional_encoders = nn.ModuleList()
 
         for level0_nodes_grouped in hier_groups:
-            linearConnection1 = nn.Linear(level0_nodes_grouped * 2, 32)
-            lrelu0 = nn.ReLU()
-            linearConnection2 = nn.Linear(32, 32)
-            lrelu1 = nn.ReLU()
-            linearConnection3 = nn.Linear(32, 1 * 2)
-
-            self.additional_encoders.append(nn.Sequential(linearConnection1, lrelu0, linearConnection2, lrelu1, linearConnection3))
+            self.additional_encoders.append(nn.Sequential(nn.Linear(level0_nodes_grouped * 2, 32), nn.ReLU(), nn.Linear(32, 32), nn.ReLU(), nn.Linear(32, 1 * 2)))
 
     def forward(self, x):
         level0 = self.encoder(x)

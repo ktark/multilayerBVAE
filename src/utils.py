@@ -1,3 +1,4 @@
+import copy
 from torch import nn
 from torch.nn import functional as F
 import torch
@@ -97,3 +98,60 @@ def normal_init(m, mean, std):
         m.weight.data.fill_(1)
         if m.bias.data is not None:
             m.bias.data.zero_()
+
+
+def latent_layer_reconstruction(pl_module):
+    # Bring the tensors to CPU
+    pl_module.eval()
+    # pl_module.cuda()
+    zero_image = torch.zeros((1, 1, 64, 64)).float().cuda()
+    level0 = pl_module.latent_dim_level0
+    level1 = pl_module.latent_dim_level1
+
+    # 0 latent features
+    level0_zero_img = torch.zeros((1, level0)).cuda()
+    level1_zero_img = torch.zeros((1, level1)).cuda()
+
+    with torch.no_grad():
+        pred0_level0 = pl_module.decoder(level0_zero_img)
+        pred0_level1 = pl_module.decoder_level1(level1_zero_img)
+
+    # "no info" predictions
+    zero_pred_level0 = torch.sigmoid(pred0_level0).data
+    zero_pred_level1 = torch.sigmoid(pred0_level1).data
+    # return zero_pred_level0, zero_pred_level1
+
+    # which latent feature vales to check
+    check_levels = [-1, 1]
+    # hierarhy indices
+    hier_indices = pl_module.encoder.mu_indices
+    recon_loss_between_layers_list = []
+    for i in np.arange(0, level1, 1):
+        for check in check_levels:
+            z_img = copy.deepcopy(level1_zero_img)
+            z_img[0, i] = check
+
+            # hier reconstr
+            reconst_z1 = pl_module.decoder_level1(z_img).cpu()
+            # to cpu
+            reconst_z1_sigm = torch.sigmoid(reconst_z1).data - zero_pred_level1.cpu()
+
+            # l0 reconstr
+            l0_indices = hier_indices[i]  # print(z_img)
+            z0_img = copy.deepcopy(level0_zero_img)
+            z0_img[0, l0_indices] = i
+
+            # to cpu
+            reconst_z0 = pl_module.decoder(z0_img).cpu()
+            reconst_z0_sigm = torch.sigmoid(reconst_z0).data - zero_pred_level0.cpu()
+
+            recon_loss_between_layers = F.mse_loss(reconst_z1_sigm.cpu(), reconst_z0_sigm.cpu())
+
+            recon_loss_between_layers_list.append(recon_loss_between_layers)
+
+            # print(recon_loss_between_layers)
+
+            # imshow(make_grid(reconst_z1_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
+            # imshow(make_grid(reconst_z0_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
+            # show()
+    return torch.FloatTensor(recon_loss_between_layers_list).sum()
