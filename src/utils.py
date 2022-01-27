@@ -100,25 +100,26 @@ def normal_init(m, mean, std):
             m.bias.data.zero_()
 
 
-def latent_layer_reconstruction(pl_module):
+def latent_layer_reconstruction(pl_module, batch_size):
     # Bring the tensors to CPU
     #pl_module.eval()
     # pl_module.cuda()
-    zero_image = torch.zeros((1, 1, 64, 64)).float().cuda()
+    switch_batchnorm(pl_module, turn_on=False)
+    #zero_image = torch.zeros((batch_size, 1, 64, 64)).float().cuda()
     level0 = pl_module.latent_dim_level0
     level1 = pl_module.latent_dim_level1
 
     # 0 latent features
-    level0_zero_img = torch.zeros((1, level0)).cuda()
-    level1_zero_img = torch.zeros((1, level1)).cuda()
+    level0_zero_img = torch.zeros((batch_size, level0)).cuda()
+    level1_zero_img = torch.zeros((batch_size, level1)).cuda()
 
-    with torch.no_grad():
-        pred0_level0 = pl_module.decoder(level0_zero_img)
-        pred0_level1 = pl_module.decoder_level1(level1_zero_img)
+    #with torch.no_grad():
+    pred0_level0 = pl_module.decoder(level0_zero_img)
+    pred0_level1 = pl_module.decoder_level1(level1_zero_img)
 
     # "no info" predictions
-    zero_pred_level0 = torch.sigmoid(pred0_level0).data
-    zero_pred_level1 = torch.sigmoid(pred0_level1).data
+    zero_pred_level0 = torch.sigmoid(pred0_level0)
+    zero_pred_level1 = torch.sigmoid(pred0_level1)
     # return zero_pred_level0, zero_pred_level1
 
     # which latent feature vales to check
@@ -126,32 +127,138 @@ def latent_layer_reconstruction(pl_module):
     # hierarhy indices
     hier_indices = pl_module.encoder.mu_indices
     recon_loss_between_layers_list = []
+    value = 0
     for i in np.arange(0, level1, 1):
         for check in check_levels:
             z_img = copy.deepcopy(level1_zero_img)
-            z_img[0, i] = check
+            batch_indices = torch.arange(0, batch_size,1).long()
+            z_img[:, i] = check
 
             # hier reconstr
-            reconst_z1 = pl_module.decoder_level1(z_img).cpu()
+            reconst_z1 = pl_module.decoder_level1(z_img)
             # to cpu
-            reconst_z1_sigm = torch.sigmoid(reconst_z1).data - zero_pred_level1.cpu()
+            reconst_z1_sigm = torch.sigmoid(reconst_z1).data - zero_pred_level1
 
             # l0 reconstr
             l0_indices = hier_indices[i]  # print(z_img)
             z0_img = copy.deepcopy(level0_zero_img)
-            z0_img[0, l0_indices] = i
+            z0_img[:, l0_indices] = check
 
             # to cpu
-            reconst_z0 = pl_module.decoder(z0_img).cpu()
-            reconst_z0_sigm = torch.sigmoid(reconst_z0).data - zero_pred_level0.cpu()
+            reconst_z0 = pl_module.decoder(z0_img)
+            reconst_z0_sigm = torch.sigmoid(reconst_z0) - zero_pred_level0
 
-            recon_loss_between_layers = F.mse_loss(reconst_z1_sigm.cpu(), reconst_z0_sigm.cpu())
+            recon_loss_between_layers = F.mse_loss(reconst_z1_sigm, reconst_z0_sigm, reduction='sum')
+
 
             recon_loss_between_layers_list.append(recon_loss_between_layers)
+            value = value + recon_loss_between_layers.item()
+    logs = {}
+    for idx, val in enumerate(recon_loss_between_layers_list):
+        logs['train_kl/latent_recon_' + str(idx)] = val.item()
+    pl_module.log_dict(
+        logs,
+        on_step=True, on_epoch=False, prog_bar=False, logger=True
+    )
+    switch_batchnorm(pl_module, turn_on=True)
 
             # print(recon_loss_between_layers)
 
             # imshow(make_grid(reconst_z1_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
             # imshow(make_grid(reconst_z0_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
             # show()
-    return torch.FloatTensor(recon_loss_between_layers_list).sum()
+    #pl_module.train()
+    return value #torch.FloatTensor(recon_loss_between_layers_list).sum()
+
+
+
+def latent_layer_reconstruction_images(pl_module, images, images_hier, mu, mu_hier):
+    # Bring the tensors to CPU
+    #pl_module.eval()
+    # pl_module.cuda()
+    #zero_image = torch.zeros((batch_size, 1, 64, 64)).float().cuda()
+    #level0 = pl_module.latent_dim_level0
+
+    #stop batchnorm
+    switch_batchnorm(pl_module, turn_on=False)
+
+    level1 = pl_module.latent_dim_level1
+    batch_size = images.size(dim=0)
+
+    # 0 latent features
+    # level0_zero_img = torch.zeros((batch_size, level0)).cuda()
+    # level1_zero_img = torch.zeros((batch_size, level1)).cuda()
+
+    #with torch.no_grad():
+    # pred0_level0 = pl_module.decoder(level0_zero_img)
+    # pred0_level1 = pl_module.decoder_level1(level1_zero_img)
+    #use mu directly for creating images without noise
+    x_recon_hier_mu = pl_module.decoder_level1(mu_hier).view(images.size())
+    x_recon_mu = pl_module.decoder(mu).view(images.size())
+
+    # "no info" predictions
+    zero_pred_level0 = torch.sigmoid(x_recon_mu)
+    zero_pred_level1 = torch.sigmoid(x_recon_hier_mu)
+    # return zero_pred_level0, zero_pred_level1
+
+    # which latent feature vales to check
+    check_levels = [-1, 1]
+    # hierarhy indices
+    hier_indices = pl_module.encoder.mu_indices
+    recon_loss_between_layers_list = []
+    value = 0
+    for i in np.arange(0, level1, 1):
+        for check in check_levels:
+            z_img = mu_hier.clone()
+            #batch_indices = torch.arange(0, batch_size).long()
+            z_img[:, i] = check
+
+            # hier reconstr
+            reconst_z1 = pl_module.decoder_level1(z_img)
+            # to cpu
+            reconst_z1_sigm = torch.sigmoid(reconst_z1) - zero_pred_level1
+
+            # l0 reconstr
+            l0_indices = hier_indices[i]  # print(z_img)
+            z0_img = mu.clone()
+            z0_img[:, l0_indices] = check
+
+            # to cpu
+            reconst_z0 = pl_module.decoder(z0_img)
+            reconst_z0_sigm = torch.sigmoid(reconst_z0) - zero_pred_level0
+
+            recon_loss_between_layers = F.mse_loss(reconst_z1_sigm, reconst_z0_sigm, reduction='sum')
+
+
+            recon_loss_between_layers_list.append(recon_loss_between_layers)
+            value = value + recon_loss_between_layers.item()
+    logs = {}
+    for idx, val in enumerate(recon_loss_between_layers_list):
+        logs['train_kl/latent_recon_' + str(idx)] = val.item()
+    pl_module.log_dict(
+        logs,
+        on_step=True, on_epoch=False, prog_bar=False, logger=True
+    )
+    # stop batchnorm
+    switch_batchnorm(pl_module, turn_on=True)
+
+            # print(recon_loss_between_layers)
+
+            # imshow(make_grid(reconst_z1_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
+            # imshow(make_grid(reconst_z0_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
+            # show()
+    #pl_module.train()
+    return value #torch.FloatTensor(recon_loss_between_layers_list).sum()
+
+
+def switch_batchnorm(pl_module, turn_on = True):
+    for module in pl_module.modules():
+        if isinstance(module, nn.BatchNorm2d) or isinstance(module, nn.BatchNorm1d):
+            if hasattr(module, 'weight'):
+                module.weight.requires_grad_(turn_on)
+            if hasattr(module, 'bias'):
+                module.bias.requires_grad_(turn_on)
+            if turn_on:
+                module.train()
+            else:
+                module.eval()

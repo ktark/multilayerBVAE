@@ -187,7 +187,12 @@ class VAEhier(pl.LightningModule):
         total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
 
         total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
-        latent_recon = latent_layer_reconstruction(self)
+
+        if self.loss_function == 'bvae_latent':
+            #empty_image = torch.zeros_like(x)
+            latent_recon = latent_layer_reconstruction_images(self, x_recon, x_recon_hier, mu, mu_hier)
+            #distributions_empty, hier_dist_concat_empty = self.encoder(empty_image)
+            #latent_recon = latent_layer_reconstruction(self, batch_size)
 
         # calculate C value
         C = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter, self.C_min, self.C_max.data[0])

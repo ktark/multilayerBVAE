@@ -28,7 +28,7 @@ def main(hparams):
                   C_stop_iter=int(hparams.C_stop_iter), hier_groups=hparams.hier_groups,
                   loss_function=hparams.loss_function,
                   level0_training_start_iter=int(hparams.level0_training_start_iter), lr=float(hparams.lr),
-                  laten_recon_coef=float(hparams.laten_recon_coef))
+                  laten_recon_coef=int(hparams.laten_recon_coef))
 
     wandb_logger = WandbLogger(
         name=f'Hierarchy: ds {hparams.dataset} | '
@@ -60,9 +60,9 @@ def main(hparams):
                                                          epoch_end_example_image_1_hierarchy,
                                                          epoch_end_example_image_2,
                                                          epoch_end_example_image_2_hierarchy,
-                                                         epoch_end_example_latent_1,
-                                                         latentRecreationLogger,
-                                                         SaveModelLogger()])
+                                                         epoch_end_example_latent_1])
+                                                         # latentRecreationLogger,
+                                                         # SaveModelLogger()])
     trainer.fit(vae, ds_dl)
 
     wandb.finish()
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", default="boxhead2")  # dataset
     parser.add_argument("--level0_training_start_iter", default=0)
     parser.add_argument("--lr", default=0.0003)
-    parser.add_argument("--laten_recon_coef", default=0.0)
+    parser.add_argument("--laten_recon_coef", default=0)
 
     args = parser.parse_args()
 

@@ -354,7 +354,7 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
             recon_loss_between_layers_list = []
             for i in np.arange(0, level1, 1):
                 for check in check_levels:
-                    z_img = copy.deepcopy(level1_zero_img)
+                    z_img = level1_zero_img.clone()
                     z_img[0, i] = check
 
                     # hier reconstr
@@ -366,17 +366,17 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
                     # l0 reconstr
                     l0_indices = hier_indices[i]  # print(z_img)
                     z0_img = copy.deepcopy(level0_zero_img)
-                    z0_img[0, l0_indices] = i
+                    z0_img[0, l0_indices] = check
 
                     # to cpu
                     reconst_z0 = pl_module.decoder(z0_img).cpu()
                     reconst_z0_sigm = torch.sigmoid(reconst_z0).data - zero_pred_level0.cpu()
-                    recon_loss_between_layers = F.mse_loss(reconst_z1_sigm.cpu(), reconst_z0_sigm.cpu())
+                    recon_loss_between_layers = F.mse_loss(reconst_z1_sigm.cpu(), reconst_z0_sigm.cpu(), reduction='sum')
 
                     print_images.append(nn.functional.pad(reconst_z0_sigm, pad=[4, 4, 4, 4], value=1.0))
                     print_images.append(torch.from_numpy(create_text_image(str(i) + ": "+str(recon_loss_between_layers.item()))))
             merged_image_cat = torch.cat(print_images, dim=0).cpu()
-            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=3, pad_value=1)
+            merged_image_grid = make_grid(merged_image_cat, normalize=False, scale_each=True, nrow=3, pad_value=1)
             self.wandb_logger.log_image('train_images/latent_info_merged',
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
