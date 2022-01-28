@@ -180,7 +180,7 @@ def latent_layer_reconstruction_images(pl_module, images, images_hier, mu, mu_hi
     #level0 = pl_module.latent_dim_level0
 
     #stop batchnorm
-    switch_batchnorm(pl_module, turn_on=False)
+    #switch_batchnorm(pl_module, turn_on=False)
 
     level1 = pl_module.latent_dim_level1
     batch_size = images.size(dim=0)
@@ -240,7 +240,7 @@ def latent_layer_reconstruction_images(pl_module, images, images_hier, mu, mu_hi
         on_step=True, on_epoch=False, prog_bar=False, logger=True
     )
     # stop batchnorm
-    switch_batchnorm(pl_module, turn_on=True)
+    #switch_batchnorm(pl_module, turn_on=True)
 
             # print(recon_loss_between_layers)
 

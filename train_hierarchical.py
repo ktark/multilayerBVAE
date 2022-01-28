@@ -32,6 +32,7 @@ def main(hparams):
 
     wandb_logger = WandbLogger(
         name=f'Hierarchy: ds {hparams.dataset} | '
+             f'{hparams.name}|'
              f'gamma/betaVAE {str(hparams.gamma)} |'
              f'l0 recon {str(hparams.zeta0)} |'
              f'C: {str(hparams.C_min)}-{str(hparams.C_max)}/{str(hparams.C_stop_iter)} | '
@@ -60,8 +61,8 @@ def main(hparams):
                                                          epoch_end_example_image_1_hierarchy,
                                                          epoch_end_example_image_2,
                                                          epoch_end_example_image_2_hierarchy,
-                                                         epoch_end_example_latent_1])
-                                                         # latentRecreationLogger,
+                                                         epoch_end_example_latent_1,
+                                                         latentRecreationLogger])
                                                          # SaveModelLogger()])
     trainer.fit(vae, ds_dl)
 
@@ -91,6 +92,7 @@ if __name__ == "__main__":
     parser.add_argument("--level0_training_start_iter", default=0)
     parser.add_argument("--lr", default=0.0003)
     parser.add_argument("--laten_recon_coef", default=0)
+    parser.add_argument("--name", default="")
 
     args = parser.parse_args()
 
