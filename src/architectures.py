@@ -91,7 +91,8 @@ class VAEh(pl.LightningModule):
 
 class VAEhier(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim_level0=12, latent_dim_level1=9, input_height=64, nc=1,
-                 hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta0=1, zeta=0.8, delta=0.001,
+                 hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta0=1, zeta=0.8,
+                 delta=0.001,
                  max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
                  loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0):
         super().__init__()
@@ -101,7 +102,7 @@ class VAEhier(pl.LightningModule):
         self.laten_recon_coef = laten_recon_coef
         self.decoder_dist = decoder_dist
         self.hier_groups = hier_groups
-        print('hier_groups VAEhier',self.hier_groups)
+        print('hier_groups VAEhier', self.hier_groups)
         self.C_stop_iter = C_stop_iter
         self.global_iter = 0
         self.gamma = gamma
@@ -189,17 +190,17 @@ class VAEhier(pl.LightningModule):
         total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
         latent_recon = 0
         if self.loss_function == 'bvae_latent':
-            #empty_image = torch.zeros_like(x)
+            # empty_image = torch.zeros_like(x)
             latent_recon = latent_layer_reconstruction_images(self, x_recon, x_recon_hier, mu, mu_hier)
-            #distributions_empty, hier_dist_concat_empty = self.encoder(empty_image)
-            #latent_recon = latent_layer_reconstruction(self, batch_size)
+            # distributions_empty, hier_dist_concat_empty = self.encoder(empty_image)
+            # latent_recon = latent_layer_reconstruction(self, batch_size)
 
         # calculate C value
         C = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter, self.C_min, self.C_max.data[0])
 
         # level 0 annealing
         C_anneal_level0 = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter - (
-                    self.C_max * (self.level0_training_start_iter / self.C_stop_iter)), self.C_min, self.C_max.data[0])
+                self.C_max * (self.level0_training_start_iter / self.C_stop_iter)), self.C_min, self.C_max.data[0])
         anneal_coef = (self.trainer.global_step - self.level0_training_start_iter) / (
                 self.level0_training_start_iter + 1)
         level0_anneal = torch.clamp(anneal_coef, torch.tensor([0]).item(), torch.tensor([1]).item())
@@ -210,8 +211,7 @@ class VAEhier(pl.LightningModule):
 
         if self.loss_function == 'bvae_latent':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * total_kld_hier.abs() + latent_recon*self.laten_recon_coef
-
+                            self.delta * total_kld_hier.abs() + latent_recon * self.laten_recon_coef
 
         if self.loss_function == 'bvae_l1_first':
 
@@ -276,7 +276,6 @@ class VAEhier(pl.LightningModule):
                             self.delta * kl_layers.abs() + self.l1_regularization * l1_loss_additional
 
         beta_vae_loss.backward()
-        opt.step()
 
         logs = {
             'train/beta_vae_loss': beta_vae_loss,
@@ -288,7 +287,7 @@ class VAEhier(pl.LightningModule):
             'train/mean_kld_hier': mean_kld_hier,
             'train/recon_loss_hier': recon_loss_hier,
             'train/C_anneal_level0': C_anneal_level0,
-            'train/latent_recon' : latent_recon
+            'train/latent_recon': latent_recon
 
         }
         for idx, val in enumerate(dim_wise_kld):
@@ -305,7 +304,233 @@ class VAEhier(pl.LightningModule):
         )
         self.dim_wise_kld = dim_wise_kld
         self.hierarchical_kl = hierarchical_kl
+        opt.step()
+        return beta_vae_loss
 
+
+class VAEhierSingleDecoder(pl.LightningModule):
+    def __init__(self, enc_out_dim=512, latent_dim_level0=12, latent_dim_level1=9, input_height=64, nc=1,
+                 hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta0=1, zeta=0.8,
+                 delta=0.001,
+                 max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
+                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0):
+        super().__init__()
+        self.latent_dim_level0 = latent_dim_level0
+        self.latent_dim_level1 = latent_dim_level1
+        self.latent_subgroups = latent_dim_level0 / latent_dim_level1
+        self.laten_recon_coef = laten_recon_coef
+        self.decoder_dist = decoder_dist
+        self.hier_groups = hier_groups
+        print('hier_groups VAEhier', self.hier_groups)
+        self.C_stop_iter = C_stop_iter
+        self.global_iter = 0
+        self.gamma = gamma
+        self.max_iter = max_iter
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.delta = delta
+        self.zeta = zeta
+        # needs to be converted to FloatTensor on cuda
+        self.C_min = torch.FloatTensor([C_min]).cuda()
+        self.C_max = torch.FloatTensor([C_max]).cuda()
+        self.loss_function = loss_function
+        self.level0_training_start_iter = torch.tensor(level0_training_start_iter)
+        self.level0_beta_vae = 0
+        self.l1_regularization = 0.0001
+        self.dim_wise_kld = []
+        self.hierarchical_kl = []
+        self.zeta0 = zeta0
+
+        self.automatic_optimization = False
+        # nr of channels in image
+        self.nc = nc
+
+        # encoder
+        self.encoder = HierInitialEncoder(nc=self.nc, latent_dim=self.latent_dim_level0, hier_groups=self.hier_groups)
+
+        self.l0_connector = nn.Sequential(nn.Linear(self.latent_dim_level0, 1024),  # B, 1024
+                                          nn.Dropout(p=0.3),
+                                          nn.BatchNorm1d(1024))
+        self.l1_connector = nn.Sequential(nn.Linear(self.latent_dim_level1, 1024),  # B, 1024
+                                          nn.Dropout(p=0.3),
+                                          nn.BatchNorm1d(1024))
+
+        self.decoder = BoxHeadSmallDecoderFixedInput(nc=self.nc).decoder
+
+        # log hyperparameters
+        self.save_hyperparameters()
+
+        # Initialize weights
+        # self.weight_init()
+        self.init_weights()
+
+    def weight_init(self):
+        for block in self._modules:
+            print(type(self._modules[block]), self._modules[block])
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def init_weights(m):
+        print(m)
+        kaiming_init(m)
+
+    def forward(self, x):
+        distributions, hier_dist_concat = self.encoder(x)
+        mu = distributions[:, :self.latent_dim_level0]
+        logvar = distributions[:, self.latent_dim_level0:]
+
+        z = reparametrize(mu, logvar)
+        z0_connector = self.l0_connector(z)
+        x_recon = self.decoder(z0_connector).view(x.size())
+
+        mu_hier = hier_dist_concat[:, :self.latent_dim_level1]
+        logvar_hier = hier_dist_concat[:, self.latent_dim_level1:]
+
+        z_hier = reparametrize(mu_hier, logvar_hier)
+        z1_connector = self.l1_connector(z_hier)
+        x_recon_hier = self.decoder(z1_connector).view(x.size())
+
+        return x_recon, mu, logvar, x_recon_hier, mu_hier, logvar_hier
+
+    def configure_optimizers(self):
+        # return torch.optim.Adam(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        return torch.optim.Adamax(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+
+    def training_step(self, batch, batch_idx):
+        batch_size = batch.size(dim=0)
+        x = batch.float()
+        x = x.detach()
+        self.global_iter = self.trainer.global_step + 1
+
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        x_recon, mu, logvar, x_recon_hier, mu_hier, logvar_hier = self(x)
+        recon_loss = reconstruction_loss(x, x_recon, self.decoder_dist)
+
+        recon_loss_hier = reconstruction_loss(x, x_recon_hier, self.decoder_dist)
+
+        total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
+
+        total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
+        latent_recon = 0
+        if self.loss_function == 'bvae_latent':
+            # empty_image = torch.zeros_like(x)
+            latent_recon = latent_layer_reconstruction_images(self, x_recon, x_recon_hier, mu, mu_hier)
+            # distributions_empty, hier_dist_concat_empty = self.encoder(empty_image)
+            # latent_recon = latent_layer_reconstruction(self, batch_size)
+
+        # calculate C value
+        C = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter, self.C_min, self.C_max.data[0])
+
+        # level 0 annealing
+        C_anneal_level0 = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter - (
+                self.C_max * (self.level0_training_start_iter / self.C_stop_iter)), self.C_min, self.C_max.data[0])
+        anneal_coef = (self.trainer.global_step - self.level0_training_start_iter) / (
+                self.level0_training_start_iter + 1)
+        level0_anneal = torch.clamp(anneal_coef, torch.tensor([0]).item(), torch.tensor([1]).item())
+
+        if self.loss_function == 'bvae':
+            beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs()
+
+        if self.loss_function == 'bvae_latent':
+            beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + latent_recon * self.laten_recon_coef
+
+        if self.loss_function == 'bvae_l1_first':
+
+            if self.trainer.global_step > self.level0_training_start_iter.item():
+                self.level0_beta_vae = (recon_loss + self.gamma * (total_kld - C_anneal_level0).abs()) * level0_anneal
+            else:
+                self.level0_beta_vae = 0
+            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * total_kld_hier.abs()
+            beta_vae_loss = self.level0_beta_vae + level1_beta_vae
+
+        if self.loss_function == 'bvae_l1_first_recon':
+            if self.trainer.global_step > self.level0_training_start_iter:
+                level0_beta_vae = recon_loss + self.gamma * (total_kld - C_anneal_level0).abs() * level0_anneal
+            else:
+                level0_beta_vae = recon_loss
+            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * total_kld_hier.abs()
+            beta_vae_loss = level0_beta_vae + level1_beta_vae
+
+        if self.loss_function == 'bvae_anneal_level0':
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs()
+
+        if self.loss_function == 'bvae_KL_layers':
+            # Calculate hier level 1 KL to level 0
+            hierarchical_kl = []
+            hierarchical_indices = self.encoder.mu_indices
+
+            for idx, indices in enumerate(hierarchical_indices):
+                indices_torch = indices.clone().detach().cuda()
+                idx_torch = torch.tensor(idx).cuda()
+                hierarchical_kl.append(
+                    kl(torch.index_select(mu, 1, indices_torch), torch.index_select(logvar, 1, indices_torch),
+                       torch.index_select(mu_hier, 1, idx_torch), torch.index_select(logvar_hier, 1, idx_torch)))
+
+            stacked_hierarchical_kl = torch.stack(hierarchical_kl)
+            kl_layers = torch.sum(stacked_hierarchical_kl)
+
+            # get loss
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + self.delta * kl_layers
+
+        if self.loss_function == 'bvae_KL_layers_only':
+            # Calculate hier level 1 KL to level 0
+            hierarchical_kl = []
+            hierarchical_indices = self.encoder.mu_indices
+
+            for idx, indices in enumerate(hierarchical_indices):
+                indices_torch = indices.clone().detach().cuda()
+                idx_torch = torch.tensor(idx).cuda()
+                hierarchical_kl.append(
+                    kl(torch.index_select(mu, 1, indices_torch), torch.index_select(logvar, 1, indices_torch),
+                       torch.index_select(mu_hier, 1, idx_torch), torch.index_select(logvar_hier, 1, idx_torch)))
+
+            stacked_hierarchical_kl = torch.stack(hierarchical_kl)
+            kl_layers = torch.sum(stacked_hierarchical_kl)
+
+            # L1 regularization for additional layers
+            l1_loss_additional = (sum(torch.sum(p.abs()) for p in self.encoder.additional_encoders.parameters()))
+
+            # get loss
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * kl_layers.abs() + self.l1_regularization * l1_loss_additional
+
+        beta_vae_loss.backward()
+
+        logs = {
+            'train/beta_vae_loss': beta_vae_loss,
+            'train/kl': mean_kld,
+            'train/recon_loss': recon_loss,
+            'train/C': C,
+            'train/iter': self.global_iter,
+            'train/kl_hier_total': total_kld_hier,
+            'train/mean_kld_hier': mean_kld_hier,
+            'train/recon_loss_hier': recon_loss_hier,
+            'train/C_anneal_level0': C_anneal_level0,
+            'train/latent_recon': latent_recon
+
+        }
+        for idx, val in enumerate(dim_wise_kld):
+            logs['train_kl/kl_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=True, logger=True
+        )
+        for idx, val in enumerate(hierarchical_kl):
+            logs['train_kl/kl_hier_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=True, logger=True
+        )
+        self.dim_wise_kld = dim_wise_kld
+        self.hierarchical_kl = hierarchical_kl
+        opt.step()
         return beta_vae_loss
 
 

@@ -155,6 +155,48 @@ class BoxHeadSmallDecoder(nn.Module):
         )
 
 
+
+class BoxHeadSmallDecoderFixedInput(nn.Module):
+    def __init__(self, nc):
+        super(BoxHeadSmallDecoderFixedInput, self).__init__()
+        self.nc = nc
+        # self.latent_dim = latent_dim
+        self.decoder = nn.Sequential(
+            # nn.Linear(self.latent_dim, 1024),  # B, 1024
+            # nn.Dropout(p=0.3),
+            # nn.BatchNorm1d(1024),
+            nn.Linear(1024, 4 * 4 * 512),  # B, 256
+            nn.Dropout(p=0.3),
+            nn.BatchNorm1d(4 * 4 * 512),
+            View((-1, 512, 4, 4)),  # B,  32,  4,  4
+            nn.ConvTranspose2d(512, 256, 4, 2, 1),
+            nn.LeakyReLU(0.3),
+            nn.Dropout(p=0.1),
+            nn.BatchNorm2d(256),
+
+            nn.ConvTranspose2d(256, 256, 4, 1, 1),
+            nn.LeakyReLU(0.3),
+            nn.Dropout(p=0.1),
+            nn.BatchNorm2d(256),
+
+            nn.ConvTranspose2d(256, 128, 4, 2, 2),
+            nn.LeakyReLU(0.3),
+            nn.Dropout(p=0.1),
+            nn.BatchNorm2d(128),
+
+            nn.ConvTranspose2d(128, 128, 4, 2, 1),
+            nn.LeakyReLU(0.3),
+            nn.Dropout(p=0.1),
+            nn.BatchNorm2d(128),
+
+            nn.ConvTranspose2d(128, 64, 4, 1, 2),
+            nn.LeakyReLU(0.3),
+            nn.Dropout(p=0.1),
+            nn.ConvTranspose2d(64, 3, 4, 2),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(p=0.1),
+
+        )
 class HierInitialEncoder(nn.Module):
     def __init__(self, nc, latent_dim, hier_groups):
         super(HierInitialEncoder, self).__init__()

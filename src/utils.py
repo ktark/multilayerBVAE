@@ -131,7 +131,7 @@ def latent_layer_reconstruction(pl_module, batch_size):
     for i in np.arange(0, level1, 1):
         for check in check_levels:
             z_img = copy.deepcopy(level1_zero_img)
-            batch_indices = torch.arange(0, batch_size,1).long()
+            #batch_indices = torch.arange(0, batch_size,1).long()
             z_img[:, i] = check
 
             # hier reconstr
@@ -151,7 +151,7 @@ def latent_layer_reconstruction(pl_module, batch_size):
             recon_loss_between_layers = F.mse_loss(reconst_z1_sigm, reconst_z0_sigm, reduction='sum')
 
 
-            recon_loss_between_layers_list.append(recon_loss_between_layers)
+            #recon_loss_between_layers_list.append(recon_loss_between_layers)
             value = value + recon_loss_between_layers.item()
     logs = {}
     for idx, val in enumerate(recon_loss_between_layers_list):
@@ -210,6 +210,7 @@ def latent_layer_reconstruction_images(pl_module, images, images_hier, mu, mu_hi
     for i in np.arange(0, level1, 1):
         for check in check_levels:
             z_img = mu_hier.clone()
+            z_img.retain_grad()
             #batch_indices = torch.arange(0, batch_size).long()
             z_img[:, i] = check
 
@@ -221,6 +222,7 @@ def latent_layer_reconstruction_images(pl_module, images, images_hier, mu, mu_hi
             # l0 reconstr
             l0_indices = hier_indices[i]  # print(z_img)
             z0_img = mu.clone()
+            z0_img.retain_grad()
             z0_img[:, l0_indices] = check
 
             # to cpu
@@ -231,7 +233,7 @@ def latent_layer_reconstruction_images(pl_module, images, images_hier, mu, mu_hi
 
 
             recon_loss_between_layers_list.append(recon_loss_between_layers)
-            value = value + recon_loss_between_layers.item()
+            value = value + recon_loss_between_layers.item()/batch_size
     logs = {}
     for idx, val in enumerate(recon_loss_between_layers_list):
         logs['train_kl/latent_recon_' + str(idx)] = val.item()
