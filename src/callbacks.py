@@ -3,6 +3,12 @@ from src.modules import *
 from pytorch_lightning.callbacks import Callback, ModelSummary
 from torchvision.utils import make_grid
 from PIL import Image, ImageFont, ImageDraw
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+from matplotlib.pyplot import imshow, figure, show
+from torchvision import transforms
+
 
 
 class ImagePredictionLogger2(Callback):
@@ -402,6 +408,11 @@ class ImagePredictionLoggerLatentActivation(Callback):
                                                     text_color="white", mode="KL")
             kl_images = create_kl_value_images(dim_wise_kld, mu_level0, logvar_level0, 72, mode="KL")
 
+            data = next(iter(trainer.train_dataloader)).cuda()
+            _, mu_l0, _, _, mu_l1, _ = pl_module.forward(data)
+
+            scatter_images = get_scatter_images(pl_module, mu_l0, mu_l1)
+
             z_level1_size = z_level1.size(1)
             for i in np.arange(0, z_level1_size, 1):
                 for z_change in (np.arange(-3, 3, 0.5)):
@@ -412,6 +423,7 @@ class ImagePredictionLoggerLatentActivation(Callback):
                     sigm_pred = torch.sigmoid(pred).data - zero_pred_level1
                     print_images_level1.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=0.0))
                 print_images_level1.append(torch.from_numpy(hier_kl_images[i]))
+                print_images_level1.append(torch.zeros_like(torch.from_numpy(hier_kl_images[i])))
 
             # Lower level images
             z_level0_size = z_level0.size(1)
@@ -424,20 +436,22 @@ class ImagePredictionLoggerLatentActivation(Callback):
                     sigm_pred = torch.sigmoid(pred).data - zero_pred_level0
                     print_images_level0.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=1.0))
                 print_images_level0.append(torch.from_numpy(kl_images[i]))
+                print_images_level0.append(scatter_images[i])
+
 
             merged_image = []
             group_counter = 0
             level1_counter = 0
             for idx, group_indices in enumerate(pl_module.hier_groups):
-                for img in print_images_level1[level1_counter:level1_counter + 13]:
+                for img in print_images_level1[level1_counter:level1_counter + 14]:
                     merged_image.append(img)
-                for img in print_images_level0[group_counter:group_counter + group_indices * 13]:
+                for img in print_images_level0[group_counter:group_counter + group_indices * 14]:
                     merged_image.append(img)
-                group_counter += group_indices * 13
-                level1_counter += 13
+                group_counter += group_indices * 14
+                level1_counter += 14
 
             merged_image_cat = torch.cat(merged_image, dim=0).cpu()
-            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=13, pad_value=1)
+            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=14, pad_value=1)
             self.wandb_logger.log_image('train_images/latent_info_' + str(self.sample),
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
@@ -710,3 +724,40 @@ def create_text_image(text, img_size=72, text_color="black",
     numpy_img = np.expand_dims(numpy_img, axis=0)
 
     return numpy_img
+
+
+
+
+def get_scatter_images(pl_module, mu, mu_hier):
+    images_list = []
+    #  l0_indices = pl_module.encoder.mu_indices[idx]
+    transforms2 = transforms.Compose([transforms.Resize((72, 72)), transforms.ToTensor()])
+    for lat1_idx, l0_indices in enumerate(pl_module.encoder.mu_indices):
+
+        for l0_idx in l0_indices:
+            corr_coefficient = torch.corrcoef(torch.stack((mu.T[l0_idx], mu_hier.T[lat1_idx]), axis=0))[0, 1].item()
+
+            fig = Figure()
+            canvas = FigureCanvas(fig)
+            fig.set_size_inches(2, 2)
+            ax = fig.gca()
+
+            ax.scatter(mu.T[l0_idx].cpu().detach().numpy(), mu_hier.T[lat1_idx].cpu().detach().numpy(), c='green',
+                       alpha=0.5)
+            ax.tick_params(axis='x', labelsize=15)
+            ax.tick_params(axis='y', labelsize=15)
+            ax.set_title(":{:.5f}".format(corr_coefficient), size=18, pad=-15)
+
+            # fig.tight_layout(pad=5)
+
+            # To remove the huge white borders
+
+            fig.canvas.draw()
+
+            image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            im = Image.fromarray(image_from_plot)
+            x = transforms2(im)
+            x_exp = np.expand_dims(x.numpy(), axis=0)
+            images_list.append(torch.from_numpy(x_exp))
+    return images_list

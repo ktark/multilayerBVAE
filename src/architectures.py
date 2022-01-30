@@ -194,6 +194,9 @@ class VAEhier(pl.LightningModule):
             latent_recon = latent_layer_reconstruction_images(self, x_recon, x_recon_hier, mu, mu_hier)
             # distributions_empty, hier_dist_concat_empty = self.encoder(empty_image)
             # latent_recon = latent_layer_reconstruction(self, batch_size)
+        corr = 0
+        if self.loss_function == 'bvae_corr':
+            corr = get_latent_levels_correlation_sum(self, mu, mu_hier)
 
         # calculate C value
         C = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter, self.C_min, self.C_max.data[0])
@@ -208,6 +211,10 @@ class VAEhier(pl.LightningModule):
         if self.loss_function == 'bvae':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
                             self.delta * total_kld_hier.abs()
+
+        if self.loss_function == 'bvae_corr':
+            beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + (1-corr) * self.laten_recon_coef
 
         if self.loss_function == 'bvae_latent':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
@@ -287,7 +294,8 @@ class VAEhier(pl.LightningModule):
             'train/mean_kld_hier': mean_kld_hier,
             'train/recon_loss_hier': recon_loss_hier,
             'train/C_anneal_level0': C_anneal_level0,
-            'train/latent_recon': latent_recon
+            'train/latent_recon': latent_recon,
+            'train/mean_corr': corr
 
         }
         for idx, val in enumerate(dim_wise_kld):

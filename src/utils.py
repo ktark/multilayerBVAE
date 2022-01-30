@@ -264,3 +264,14 @@ def switch_batchnorm(pl_module, turn_on = True):
                 module.train()
             else:
                 module.eval()
+
+
+def get_latent_levels_correlation_sum(pl_module, mu, mu_hier):
+    repeats = torch.tensor(pl_module.hier_groups).cuda()
+    mu_hier_trans_repeated = torch.repeat_interleave(mu_hier.T, repeats, dim=0)
+    mu_trans = mu.T
+
+    list_of_coeff = [torch.abs(torch.corrcoef(torch.stack((mu_trans[idx], mu_hier_trans_repeated[idx]), axis=0))[0, 1]) for idx in
+                     torch.arange(0, mu_trans.size(0), 1)]
+    corr = torch.stack(list_of_coeff).sum().div(mu_trans.size(0))
+    return corr
