@@ -237,10 +237,14 @@ class ImagePredictionLoggerHierarchy(Callback):
             hier_kl_images = create_kl_value_images(hierarchical_kl, mu_level1, logvar_level1, 72,
                                                     background_color="black", text_color="white")
             kl_images = create_kl_value_images(dim_wise_kld, mu_level0, logvar_level0, 72)
-
+            l0_low, l0_high, l1_low, l1_high = get_visualization_latent_border(trainer, pl_module)
+            l0_low.cpu()
+            l0_high.cpu()
+            l1_low.cpu()
+            l1_high.cpu()
             z_level1_size = z_level1.size(1)
             for i in np.arange(0, z_level1_size, 1):
-                for z_change in (np.arange(-3, 3, 0.5)):
+                for z_change in np.linspace(l1_low[i].item(), l1_high[i].item(), 12): #(np.arange(-3, 3, 0.5)):
                     z_copy = z_level1.clone()
                     z_copy[0, i] = z_change
                     with torch.no_grad():
@@ -252,7 +256,7 @@ class ImagePredictionLoggerHierarchy(Callback):
             # Lower level images
             z_level0_size = z_level0.size(1)
             for i in np.arange(0, z_level0_size, 1):
-                for z_change in (np.arange(-3, 3, 0.5)):
+                for z_change in np.linspace(l0_low[i].item(), l0_high[i].item(), 12): #(np.arange(-3, 3, 0.5)):
                     z_copy = z_level0.clone()
                     z_copy[0, i] = z_change
                     with torch.no_grad():
@@ -410,12 +414,18 @@ class ImagePredictionLoggerLatentActivation(Callback):
 
             data = next(iter(trainer.train_dataloader)).cuda()
             _, mu_l0, _, _, mu_l1, _ = pl_module.forward(data)
+            mu_l0.cpu()
+            mu_l1.cpu()
 
             scatter_images = get_scatter_images(pl_module, mu_l0, mu_l1)
-
+            l0_low, l0_high, l1_low, l1_high = get_visualization_latent_border(trainer, pl_module)
+            l0_low.cpu()
+            l0_high.cpu()
+            l1_low.cpu()
+            l1_high.cpu()
             z_level1_size = z_level1.size(1)
             for i in np.arange(0, z_level1_size, 1):
-                for z_change in (np.arange(-3, 3, 0.5)):
+                for z_change in np.linspace(l1_low[i].item(), l1_high[i].item(), 12): #(np.arange(-3, 3, 0.5)):
                     z_copy = torch.zeros_like(z_level1)
                     z_copy[0, i] = z_change
                     with torch.no_grad():
@@ -428,7 +438,7 @@ class ImagePredictionLoggerLatentActivation(Callback):
             # Lower level images
             z_level0_size = z_level0.size(1)
             for i in np.arange(0, z_level0_size, 1):
-                for z_change in (np.arange(-3, 3, 0.5)):
+                for z_change in np.linspace(l0_low[i].item(), l0_high[i].item(), 12):#(np.arange(-3, 3, 0.5)):
                     z_copy = torch.zeros_like(z_level0)
                     z_copy[0, i] = z_change
                     with torch.no_grad():
@@ -613,7 +623,7 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
 
-# TO DO
+# TO DO: currently for 2 decoders
 class ImagePredictionLoggerMergedLatentActivationSingleDecoder(Callback):
     def __init__(self, wandb_logger=None):
         super().__init__()
@@ -725,6 +735,12 @@ def create_text_image(text, img_size=72, text_color="black",
 
     return numpy_img
 
+def get_visualization_latent_border(trainer, pl_module):
+    data = next(iter(trainer.train_dataloader)).cuda()
+    _, mu_l0, _, _, mu_l1, _ = pl_module.forward(data)
+
+    return torch.min(mu_l0, dim=0).values, torch.max(mu_l0, dim=0).values, torch.min(mu_l1, dim=0).values, torch.max(mu_l1, dim=0).values
+
 
 
 
@@ -761,3 +777,4 @@ def get_scatter_images(pl_module, mu, mu_hier):
             x_exp = np.expand_dims(x.numpy(), axis=0)
             images_list.append(torch.from_numpy(x_exp))
     return images_list
+

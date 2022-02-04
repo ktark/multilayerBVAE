@@ -185,6 +185,8 @@ class VAEhier(pl.LightningModule):
 
         recon_loss_hier = reconstruction_loss(x, x_recon_hier, self.decoder_dist)
 
+        recon_loss_levels = reconstruction_loss(torch.sigmoid(x_recon_hier), x_recon, self.decoder_dist)
+
         total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
 
         total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
@@ -214,7 +216,7 @@ class VAEhier(pl.LightningModule):
 
         if self.loss_function == 'bvae_corr':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * total_kld_hier.abs() + (1-corr) * self.laten_recon_coef
+                            self.delta * total_kld_hier.abs() + corr * self.laten_recon_coef + recon_loss_levels*20
 
         if self.loss_function == 'bvae_latent':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
