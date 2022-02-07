@@ -544,6 +544,10 @@ class VAEhierSingleDecoder(pl.LightningModule):
         return beta_vae_loss
 
 
+
+
+
+
 def kaiming_init(m):
     if isinstance(m, (nn.Linear, nn.Conv2d)):
         init.kaiming_normal_(m.weight)

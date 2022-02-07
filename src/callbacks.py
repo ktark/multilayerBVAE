@@ -778,3 +778,39 @@ def get_scatter_images(pl_module, mu, mu_hier):
             images_list.append(torch.from_numpy(x_exp))
     return images_list
 
+
+def get_first_images_mu(trainer, pl_module, ds, logger):
+    images_indices = np.arange(0, 50, 1)
+
+    l0_cols = ['l0_' + str(k) for k in np.arange(0, pl_module.latent_dim, 1)]
+
+    columns = ["image_id"]
+    columns.extend(l0_cols)
+    full_data = []
+
+    for idx in images_indices:
+        data_row = []
+        data = ds.__getitem__(idx).reshape((-1, 3, 64, 64)).float().cuda()
+        _, mu_l0, _ = pl_module.forward(data)
+        data_row.extend([idx])
+        data_row.extend(mu_l0.flatten().detach().cpu().numpy())  # , mu_l1])
+        full_data.append(data_row)
+    logger.log_table(key="validation_samples", columns=columns, data=full_data)
+
+
+class get_first_images_mu_logger(Callback):
+    def __init__(self, ds=None, logger=None):
+        super().__init__()
+        self.ds = ds
+        self.logger = logger
+        self.epoch_count = 0
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        # Bring the tensors to CPU
+        self.epoch_count += 1
+        # print('test epoch count', self.epoch_count, 'div 10', self.epoch_count%10==0)
+
+        if self.epoch_count % 50 == 1:
+            pl_module.eval()
+            get_first_images_mu(trainer, pl_module, self.ds, self.logger)
+            pl_module.train()
