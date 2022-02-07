@@ -153,6 +153,87 @@ class ImagePredictionLogger(Callback):
             self.wandb_logger.log_image('train_images/test_image_recon_' + str(self.sample), [(recon_image.numpy())])
             pl_module.train()
 
+
+class ImagePredictionLoggerLayer(Callback):
+    def __init__(self, sample=0, ds=None, wandb_logger=None):
+        super().__init__()
+        self.sample = sample
+        self.ds = ds
+        self.epoch_count = 0
+        self.wandb_logger = wandb_logger
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        self.epoch_count += 1
+
+        if self.epoch_count % 5 == 1:
+            val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
+
+            pl_module.eval()
+
+            distributions = pl_module.encoder(val_imgs)
+
+            hier0 = pl_module.encoder_level1_0(distributions[:, [0, 20]])
+            hier1 = pl_module.encoder_level1_1(distributions[:, [1, 21]])
+            hier2 = pl_module.encoder_level1_2(distributions[:, [2, 22]])
+            hier3 = pl_module.encoder_level1_3(distributions[:, [3, 23]])
+            hier4 = pl_module.encoder_level1_4(distributions[:, [4, 24]])
+            hier5 = pl_module.encoder_level1_5(distributions[:, [5, 25]])
+            hier6 = pl_module.encoder_level1_6(distributions[:, [6, 26]])
+            hier7 = pl_module.encoder_level1_7(distributions[:, [7, 27]])
+            hier8 = pl_module.encoder_level1_8(distributions[:, [8, 28]])
+            hier9 = pl_module.encoder_level1_9(distributions[:, [9, 29]])
+            hier10 = pl_module.encoder_level1_10(distributions[:, [10, 30]])
+            hier11 = pl_module.encoder_level1_11(distributions[:, [11, 31]])
+            hier12 = pl_module.encoder_level1_12(distributions[:, [12, 32]])
+            hier13 = pl_module.encoder_level1_13(distributions[:, [13, 33]])
+            hier14 = pl_module.encoder_level1_14(distributions[:, [14, 34]])
+            hier15 = pl_module.encoder_level1_15(distributions[:, [15, 35]])
+            hier16 = pl_module.encoder_level1_16(distributions[:, [16, 36]])
+            hier17 = pl_module.encoder_level1_17(distributions[:, [17, 37]])
+            hier18 = pl_module.encoder_level1_18(distributions[:, [18, 38]])
+            hier19 = pl_module.encoder_level1_19(distributions[:, [19, 39]])
+
+            cat_hier = torch.cat((hier0[:, :4], hier1[:, :4], hier2[:, :4], hier3[:, :4], hier4[:, :4], hier5[:, :4],
+                                  hier6[:, :4], hier7[:, :4], hier8[:, :4], hier9[:, :4], hier10[:, :4], hier11[:, :4],
+                                  hier12[:, :4], hier13[:, :4], hier14[:, :4], hier15[:, :4], hier16[:, :4],
+                                  hier17[:, :4],
+                                  hier18[:, :4], hier19[:, :4],
+                                  hier0[:, 4:], hier1[:, 4:], hier2[:, 4:], hier3[:, 4:], hier4[:, 4:], hier5[:, 4:],
+                                  hier6[:, 4:], hier7[:, 4:], hier8[:, 4:], hier9[:, 4:], hier10[:, 4:], hier11[:, 4:],
+                                  hier12[:, 4:], hier13[:, 4:], hier14[:, 4:], hier15[:, 4:], hier16[:, 4:],
+                                  hier17[:, 4:],
+                                  hier18[:, 4:], hier19[:, 4:]), axis=1)
+            # print('cat_hier', cat_hier.shape, hier1.shape, hier2.shape)
+            mu_level1 = cat_hier[:, :pl_module.latent_dim_level1]
+            #logvar_level1 = cat_hier[:, pl_module.latent_dim_level1:]
+
+            #mu_level1 = hier_dist_concat[:, :pl_module.latent_dim_level1]
+            mu_level0 = distributions[:, :pl_module.latent_dim_level0]
+
+            z_level1 = mu_level1
+            z_level0 = mu_level0
+
+            with torch.no_grad():
+                pred_level1 = pl_module.decoder_level1(z_level1.to(pl_module.device)).cpu()
+                pred_level0 = pl_module.decoder(z_level0.to(pl_module.device)).cpu()
+
+            level1_recon = torch.sigmoid(pred_level1).data
+            level1_recon_pad = nn.functional.pad(level1_recon, pad=[4, 4, 4, 4], value=0.0)
+
+            level0_recon = torch.sigmoid(pred_level0).data
+            level0_recon_pad = nn.functional.pad(level0_recon, pad=[4, 4, 4, 4], value=1.0)
+
+            orig_pad = nn.functional.pad(val_imgs.cpu(), pad=[4, 4, 4, 4], value=0.5)
+
+            recon_img = [orig_pad, level0_recon_pad, level1_recon_pad]
+
+            print_orig_recon = torch.cat(recon_img, dim=0).cpu()
+            recon_image = make_grid(print_orig_recon, normalize=True, scale_each=True, nrow=1, pad_value=1)
+            recon_image = recon_image.permute(1, 2, 0)
+            # Log the images as wandb Image
+            self.wandb_logger.log_image('train_images/test_image_recon_' + str(self.sample), [(recon_image.numpy())])
+            pl_module.train()
+
 class ImagePredictionLoggerSingleDecoder(Callback):
     def __init__(self, sample=0, ds=None, wandb_logger=None):
         super().__init__()
@@ -467,6 +548,147 @@ class ImagePredictionLoggerLatentActivation(Callback):
             pl_module.train()
 
 
+# Layers
+class ImagePredictionLoggerLatentActivationLayers(Callback):
+    def __init__(self, sample=0, ds=None, wandb_logger=None):
+        super().__init__()
+        self.sample = sample
+        self.ds = ds
+        self.epoch_count = 0
+        self.wandb_logger = wandb_logger
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        self.epoch_count += 1
+
+        if self.epoch_count % 5 == 1:
+            # Bring the tensors to CPU
+            pl_module.eval()
+            pl_module.cuda()
+            val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
+
+            distributions = pl_module.encoder(val_imgs)
+            #, hier_dist_concat
+            hier0 = pl_module.encoder_level1_0(distributions[:, [0, 20]])
+            hier1 = pl_module.encoder_level1_1(distributions[:, [1, 21]])
+            hier2 = pl_module.encoder_level1_2(distributions[:, [2, 22]])
+            hier3 = pl_module.encoder_level1_3(distributions[:, [3, 23]])
+            hier4 = pl_module.encoder_level1_4(distributions[:, [4, 24]])
+            hier5 = pl_module.encoder_level1_5(distributions[:, [5, 25]])
+            hier6 = pl_module.encoder_level1_6(distributions[:, [6, 26]])
+            hier7 = pl_module.encoder_level1_7(distributions[:, [7, 27]])
+            hier8 = pl_module.encoder_level1_8(distributions[:, [8, 28]])
+            hier9 = pl_module.encoder_level1_9(distributions[:, [9, 29]])
+            hier10 = pl_module.encoder_level1_10(distributions[:, [10, 30]])
+            hier11 = pl_module.encoder_level1_11(distributions[:, [11, 31]])
+            hier12 = pl_module.encoder_level1_12(distributions[:, [12, 32]])
+            hier13 = pl_module.encoder_level1_13(distributions[:, [13, 33]])
+            hier14 = pl_module.encoder_level1_14(distributions[:, [14, 34]])
+            hier15 = pl_module.encoder_level1_15(distributions[:, [15, 35]])
+            hier16 = pl_module.encoder_level1_16(distributions[:, [16, 36]])
+            hier17 = pl_module.encoder_level1_17(distributions[:, [17, 37]])
+            hier18 = pl_module.encoder_level1_18(distributions[:, [18, 38]])
+            hier19 = pl_module.encoder_level1_19(distributions[:, [19, 39]])
+
+            cat_hier = torch.cat((hier0[:, :4], hier1[:, :4], hier2[:, :4], hier3[:, :4], hier4[:, :4], hier5[:, :4],
+                                  hier6[:, :4], hier7[:, :4], hier8[:, :4], hier9[:, :4], hier10[:, :4], hier11[:, :4],
+                                  hier12[:, :4], hier13[:, :4], hier14[:, :4], hier15[:, :4], hier16[:, :4],
+                                  hier17[:, :4],
+                                  hier18[:, :4], hier19[:, :4],
+                                  hier0[:, 4:], hier1[:, 4:], hier2[:, 4:], hier3[:, 4:], hier4[:, 4:], hier5[:, 4:],
+                                  hier6[:, 4:], hier7[:, 4:], hier8[:, 4:], hier9[:, 4:], hier10[:, 4:], hier11[:, 4:],
+                                  hier12[:, 4:], hier13[:, 4:], hier14[:, 4:], hier15[:, 4:], hier16[:, 4:],
+                                  hier17[:, 4:],
+                                  hier18[:, 4:], hier19[:, 4:]), axis=1)
+            # print('cat_hier', cat_hier.shape, hier1.shape, hier2.shape)
+            mu_level1 = cat_hier[:, :pl_module.latent_dim_level1]
+            logvar_level1 = cat_hier[:, pl_module.latent_dim_level1:]
+
+
+
+            # mu_level1 = hier_dist_concat[:, :pl_module.latent_dim_level1]
+            # logvar_level1 = hier_dist_concat[:, pl_module.latent_dim_level1:]
+            mu_level0 = distributions[:, :pl_module.latent_dim_level0]
+            logvar_level0 = distributions[:, pl_module.latent_dim_level0:]
+
+            _, dim_wise_kld, _ = kl_divergence(mu_level0, logvar_level0)
+
+            _, hierarchical_kl, _ = kl_divergence(mu_level1, logvar_level1)
+
+            z_level1 = mu_level1
+            z_level0 = mu_level0
+
+            print_images_level1 = []
+            print_images_level0 = []
+
+            with torch.no_grad():
+                pred0_level0 = pl_module.decoder(torch.zeros_like(z_level0)).cpu()
+                pred0_level1 = pl_module.decoder_level1(torch.zeros_like(z_level1)).cpu()
+
+            zero_pred_level0 = torch.sigmoid(pred0_level0).data
+            zero_pred_level1 = torch.sigmoid(pred0_level1).data
+
+            # Higher level images
+
+            hier_kl_images = create_kl_value_images(dim_wise_kld, mu_level0, logvar_level0, 72,
+                                                    background_color="black",
+                                                    text_color="white", mode="KL")
+            kl_images = create_kl_value_images(hierarchical_kl, mu_level1, logvar_level1, 72, mode="KL")
+
+            data = next(iter(trainer.train_dataloader)).cuda()
+            _, mu_l0, _, _, mu_l1, _ = pl_module.forward(data)
+            mu_l0.cpu()
+            mu_l1.cpu()
+
+            scatter_images = get_scatter_images_layer(pl_module, mu_l0, mu_l1)
+            l0_low, l0_high, l1_low, l1_high = get_visualization_latent_border(trainer, pl_module)
+            l0_low.cpu()
+            l0_high.cpu()
+            l1_low.cpu()
+            l1_high.cpu()
+            z_level0_size = z_level0.size(1)
+            for i in np.arange(0, z_level0_size, 1):
+                for z_change in np.linspace(l0_low[i].item(), l0_high[i].item(), 12): #(np.arange(-3, 3, 0.5)):
+                    z_copy = torch.zeros_like(z_level0)
+                    z_copy[0, i] = z_change
+                    with torch.no_grad():
+                        pred = pl_module.decoder(z_copy.to(pl_module.device)).cpu()
+                    sigm_pred = torch.sigmoid(pred).data - zero_pred_level0
+                    print_images_level0.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=0.0))
+                print_images_level0.append(torch.from_numpy(hier_kl_images[i]))
+                print_images_level0.append(torch.zeros_like(torch.from_numpy(hier_kl_images[i])))
+
+            # Lower level images
+            z_level1_size = z_level1.size(1)
+            for i in np.arange(0, z_level1_size, 1):
+                for z_change in np.linspace(l1_low[i].item(), l1_high[i].item(), 12):#(np.arange(-3, 3, 0.5)):
+                    z_copy = torch.zeros_like(z_level1)
+                    z_copy[0, i] = z_change
+                    with torch.no_grad():
+                        pred = pl_module.decoder_level1(z_copy.to(pl_module.device)).cpu()
+                    sigm_pred = torch.sigmoid(pred).data - zero_pred_level1
+                    print_images_level1.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=1.0))
+                print_images_level1.append(torch.from_numpy(kl_images[i]))
+                print_images_level1.append(scatter_images[i])
+
+
+            merged_image = []
+            group_counter = 0
+            level0_counter = 0
+            for idx, group_indices in enumerate(pl_module.hier_groups):
+                for img in print_images_level0[level0_counter:level0_counter + 14]:
+                    merged_image.append(img)
+                for img in print_images_level1[group_counter:group_counter + group_indices * 14]:
+                    merged_image.append(img)
+                group_counter += group_indices * 14
+                level0_counter += 14
+
+            merged_image_cat = torch.cat(merged_image, dim=0).cpu()
+            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=14, pad_value=1)
+            self.wandb_logger.log_image('train_images/latent_info_' + str(self.sample),
+                                        [(merged_image_grid.permute(1, 2, 0).numpy())])
+            pl_module.train()
+
+
 class ImagePredictionLoggerLatentActivationSingleDecoder(Callback):
     def __init__(self, sample=0, ds=None, wandb_logger=None):
         super().__init__()
@@ -623,6 +845,8 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
 
+
+
 # TO DO: currently for 2 decoders
 class ImagePredictionLoggerMergedLatentActivationSingleDecoder(Callback):
     def __init__(self, wandb_logger=None):
@@ -778,6 +1002,40 @@ def get_scatter_images(pl_module, mu, mu_hier):
             images_list.append(torch.from_numpy(x_exp))
     return images_list
 
+
+def get_scatter_images_layer(pl_module, mu, mu_hier):
+    images_list = []
+    #  l0_indices = pl_module.encoder.mu_indices[idx]
+    transforms2 = transforms.Compose([transforms.Resize((72, 72)), transforms.ToTensor()])
+    for lat1_idx in torch.arange(0,20,1):
+
+        for l0_idx in torch.arange(0,4,1):
+            corr_coefficient = torch.corrcoef(torch.stack((mu.T[lat1_idx], mu_hier.T[lat1_idx*4+l0_idx]), axis=0))[0, 1].item()
+
+            fig = Figure()
+            canvas = FigureCanvas(fig)
+            fig.set_size_inches(2, 2)
+            ax = fig.gca()
+
+            ax.scatter(mu.T[lat1_idx].cpu().detach().numpy(), mu_hier.T[lat1_idx*4+l0_idx].cpu().detach().numpy(), c='green',
+                       alpha=0.5)
+            ax.tick_params(axis='x', labelsize=15)
+            ax.tick_params(axis='y', labelsize=15)
+            ax.set_title(":{:.5f}".format(corr_coefficient), size=18, pad=-15)
+
+            # fig.tight_layout(pad=5)
+
+            # To remove the huge white borders
+
+            fig.canvas.draw()
+
+            image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            im = Image.fromarray(image_from_plot)
+            x = transforms2(im)
+            x_exp = np.expand_dims(x.numpy(), axis=0)
+            images_list.append(torch.from_numpy(x_exp))
+    return images_list
 
 def get_first_images_mu(trainer, pl_module, ds, logger):
     images_indices = np.arange(0, 50, 1)

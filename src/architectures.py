@@ -545,6 +545,407 @@ class VAEhierSingleDecoder(pl.LightningModule):
 
 
 
+class VAEmulti(pl.LightningModule):
+    def __init__(self, enc_out_dim=512, latent_dim_level0=12, latent_dim_level1=9, input_height=64, nc=1,
+                 hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta0=1, zeta=0.8,
+                 delta=0.001,
+                 max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
+                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0):
+        super().__init__()
+        self.latent_dim_level0 = latent_dim_level0
+        self.latent_dim_level1 = latent_dim_level1
+        self.latent_subgroups = latent_dim_level0 / latent_dim_level1
+        self.laten_recon_coef = laten_recon_coef
+        self.decoder_dist = decoder_dist
+        self.hier_groups = hier_groups
+        #print('hier_groups VAEhier', self.hier_groups)
+        self.C_stop_iter = C_stop_iter
+        self.global_iter = 0
+        self.gamma = gamma
+        self.max_iter = max_iter
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.delta = delta
+        self.zeta = zeta
+        # needs to be converted to FloatTensor on cuda
+        self.C_min = torch.FloatTensor([C_min]).cuda()
+        self.C_max = torch.FloatTensor([C_max]).cuda()
+        self.loss_function = loss_function
+        self.level0_training_start_iter = torch.tensor(level0_training_start_iter)
+        self.level0_beta_vae = 0
+        self.l1_regularization = 0.0001
+        self.dim_wise_kld = []
+        self.hierarchical_kl = []
+        self.zeta0 = zeta0
+
+        self.automatic_optimization = False
+        # nr of channels in image
+        self.nc = nc
+
+        # encoder
+        self.encoder = BoxHeadSmallEncoder(nc=self.nc, latent_dim=self.latent_dim_level0)
+
+        ### encoders for hierarchical
+        self.encoder_level1_0 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32,32),
+            nn.ReLU(),
+            nn.Linear(32, 4*2)
+        )
+        self.encoder_level1_1 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_2 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_3 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_4 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_5 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_6 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_7 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_8 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_9 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_10 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_11 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_12 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_13 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_14 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_15 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_16 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_17 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+        self.encoder_level1_18 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+
+        self.encoder_level1_19 = nn.Sequential(
+            nn.Linear(1 * 2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 4 * 2)
+        )
+
+        self.decoder = BoxHeadSmallDecoder(nc=self.nc, latent_dim=self.latent_dim_level0).decoder
+
+        self.decoder_level1 = BoxHeadSmallDecoder(nc=self.nc, latent_dim=self.latent_dim_level1).decoder
+
+        # log hyperparameters
+        self.save_hyperparameters()
+
+        # Initialize weights
+        # self.weight_init()
+        self.init_weights()
+
+    def weight_init(self):
+        for block in self._modules:
+            print(type(self._modules[block]), self._modules[block])
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def init_weights(m):
+        print(m)
+        kaiming_init(m)
+
+    def forward(self, x):
+        distributions = self.encoder(x)
+        mu = distributions[:, :self.latent_dim_level0]
+        logvar = distributions[:, self.latent_dim_level0:]
+
+        z = reparametrize(mu, logvar)
+        x_recon = self.decoder(z).view(x.size())
+
+        hier0 = self.encoder_level1_0(distributions[:, [0, 20]])
+        hier1 = self.encoder_level1_1(distributions[:, [1, 21]])
+        hier2 = self.encoder_level1_2(distributions[:, [2, 22]])
+        hier3 = self.encoder_level1_3(distributions[:, [3, 23]])
+        hier4 = self.encoder_level1_4(distributions[:, [4, 24]])
+        hier5 = self.encoder_level1_5(distributions[:, [5, 25]])
+        hier6 = self.encoder_level1_6(distributions[:, [6, 26]])
+        hier7 = self.encoder_level1_7(distributions[:, [7, 27]])
+        hier8 = self.encoder_level1_8(distributions[:, [8, 28]])
+        hier9 = self.encoder_level1_9(distributions[:, [9, 29]])
+        hier10 = self.encoder_level1_10(distributions[:, [10, 30]])
+        hier11 = self.encoder_level1_11(distributions[:, [11, 31]])
+        hier12 = self.encoder_level1_12(distributions[:, [12, 32]])
+        hier13 = self.encoder_level1_13(distributions[:, [13, 33]])
+        hier14 = self.encoder_level1_14(distributions[:, [14, 34]])
+        hier15 = self.encoder_level1_15(distributions[:, [15, 35]])
+        hier16 = self.encoder_level1_16(distributions[:, [16, 36]])
+        hier17 = self.encoder_level1_17(distributions[:, [17, 37]])
+        hier18 = self.encoder_level1_18(distributions[:, [18, 38]])
+        hier19 = self.encoder_level1_19(distributions[:, [19, 39]])
+
+        cat_hier = torch.cat((hier0[:, :4], hier1[:, :4], hier2[:, :4], hier3[:, :4], hier4[:, :4], hier5[:, :4],
+                              hier6[:, :4], hier7[:, :4], hier8[:, :4], hier9[:, :4], hier10[:, :4], hier11[:, :4],
+                              hier12[:, :4], hier13[:, :4], hier14[:, :4], hier15[:, :4], hier16[:, :4], hier17[:, :4],
+                              hier18[:, :4], hier19[:, :4],
+                              hier0[:, 4:], hier1[:, 4:], hier2[:, 4:], hier3[:, 4:], hier4[:, 4:], hier5[:, 4:],
+                              hier6[:, 4:], hier7[:, 4:], hier8[:, 4:], hier9[:, 4:], hier10[:, 4:], hier11[:, 4:],
+                              hier12[:, 4:], hier13[:, 4:], hier14[:, 4:], hier15[:, 4:], hier16[:, 4:], hier17[:, 4:],
+                              hier18[:, 4:], hier19[:, 4:]), axis=1)
+        # print('cat_hier', cat_hier.shape, hier1.shape, hier2.shape)
+        mu_hier = cat_hier[:, :self.latent_dim_level1]
+        logvar_hier = cat_hier[:, self.latent_dim_level1:]
+
+        z_hier = reparametrize(mu_hier, logvar_hier)
+        x_recon_hier = self.decoder_level1(z_hier).view(x.size())
+
+        return x_recon, mu, logvar, x_recon_hier, mu_hier, logvar_hier
+
+    def configure_optimizers(self):
+        # return torch.optim.Adam(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        return torch.optim.Adamax(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+
+    def training_step(self, batch, batch_idx):
+        batch_size = batch.size(dim=0)
+        x = batch.float()
+        x = x.detach()
+        self.global_iter = self.trainer.global_step + 1
+
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        x_recon, mu, logvar, x_recon_hier, mu_hier, logvar_hier = self(x)
+        recon_loss = reconstruction_loss(x, x_recon, self.decoder_dist)
+
+        recon_loss_hier = reconstruction_loss(x, x_recon_hier, self.decoder_dist)
+
+        recon_loss_levels = reconstruction_loss(torch.sigmoid(x_recon_hier), x_recon, self.decoder_dist)
+
+        total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
+
+        total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
+        latent_recon = 0
+        if self.loss_function == 'bvae_latent':
+            # empty_image = torch.zeros_like(x)
+            latent_recon = latent_layer_reconstruction_images(self, x_recon, x_recon_hier, mu, mu_hier)
+            # distributions_empty, hier_dist_concat_empty = self.encoder(empty_image)
+            # latent_recon = latent_layer_reconstruction(self, batch_size)
+        corr = 0
+        if self.loss_function == 'bvae_corr':
+            corr = get_latent_levels_correlation_sum(self, mu, mu_hier)
+
+        # calculate C value
+        C = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter, self.C_min, self.C_max.data[0])
+
+        # level 0 annealing
+        C_anneal_level0 = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter - (
+                self.C_max * (self.level0_training_start_iter / self.C_stop_iter)), self.C_min, self.C_max.data[0])
+        anneal_coef = (self.trainer.global_step - self.level0_training_start_iter) / (
+                self.level0_training_start_iter + 1)
+        level0_anneal = torch.clamp(anneal_coef, torch.tensor([0]).item(), torch.tensor([1]).item())
+
+        if self.loss_function == 'bvae':
+            beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs()
+
+        if self.loss_function == 'bvae_corr':
+            beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + corr * self.laten_recon_coef + recon_loss_levels*20
+
+        if self.loss_function == 'bvae_latent':
+            beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + latent_recon * self.laten_recon_coef
+
+        if self.loss_function == 'bvae_l1_first':
+
+            if self.trainer.global_step > self.level0_training_start_iter.item():
+                self.level0_beta_vae = (recon_loss + self.gamma * (total_kld - C_anneal_level0).abs()) * level0_anneal
+            else:
+                self.level0_beta_vae = 0
+            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * total_kld_hier.abs()
+            beta_vae_loss = self.level0_beta_vae + level1_beta_vae
+
+        if self.loss_function == 'bvae_l1_first_recon':
+            if self.trainer.global_step > self.level0_training_start_iter:
+                level0_beta_vae = recon_loss + self.gamma * (total_kld - C_anneal_level0).abs() * level0_anneal
+            else:
+                level0_beta_vae = recon_loss
+            level1_beta_vae = self.zeta * recon_loss_hier + self.delta * total_kld_hier.abs()
+            beta_vae_loss = level0_beta_vae + level1_beta_vae
+
+        if self.loss_function == 'bvae_anneal_level0':
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs()
+
+        if self.loss_function == 'bvae_KL_layers':
+            # Calculate hier level 1 KL to level 0
+            hierarchical_kl = []
+            hierarchical_indices = self.encoder.mu_indices
+
+            for idx, indices in enumerate(hierarchical_indices):
+                indices_torch = indices.clone().detach().cuda()
+                idx_torch = torch.tensor(idx).cuda()
+                hierarchical_kl.append(
+                    kl(torch.index_select(mu, 1, indices_torch), torch.index_select(logvar, 1, indices_torch),
+                       torch.index_select(mu_hier, 1, idx_torch), torch.index_select(logvar_hier, 1, idx_torch)))
+
+            stacked_hierarchical_kl = torch.stack(hierarchical_kl)
+            kl_layers = torch.sum(stacked_hierarchical_kl)
+
+            # get loss
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + self.delta * kl_layers
+
+        if self.loss_function == 'bvae_KL_layers_only':
+            # Calculate hier level 1 KL to level 0
+            hierarchical_kl = []
+            hierarchical_indices = self.encoder.mu_indices
+
+            for idx, indices in enumerate(hierarchical_indices):
+                indices_torch = indices.clone().detach().cuda()
+                idx_torch = torch.tensor(idx).cuda()
+                hierarchical_kl.append(
+                    kl(torch.index_select(mu, 1, indices_torch), torch.index_select(logvar, 1, indices_torch),
+                       torch.index_select(mu_hier, 1, idx_torch), torch.index_select(logvar_hier, 1, idx_torch)))
+
+            stacked_hierarchical_kl = torch.stack(hierarchical_kl)
+            kl_layers = torch.sum(stacked_hierarchical_kl)
+
+            # L1 regularization for additional layers
+            l1_loss_additional = (sum(torch.sum(p.abs()) for p in self.encoder.additional_encoders.parameters()))
+
+            # get loss
+            beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * kl_layers.abs() + self.l1_regularization * l1_loss_additional
+
+        beta_vae_loss.backward()
+
+        logs = {
+            'train/beta_vae_loss': beta_vae_loss,
+            'train/kl': mean_kld,
+            'train/recon_loss': recon_loss,
+            'train/C': C,
+            'train/iter': self.global_iter,
+            'train/kl_hier_total': total_kld_hier,
+            'train/mean_kld_hier': mean_kld_hier,
+            'train/recon_loss_hier': recon_loss_hier,
+            'train/C_anneal_level0': C_anneal_level0,
+            'train/latent_recon': latent_recon,
+            'train/mean_corr': corr
+
+        }
+        for idx, val in enumerate(dim_wise_kld):
+            logs['train_kl/kl_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=True, logger=True
+        )
+        for idx, val in enumerate(hierarchical_kl):
+            logs['train_kl/kl_hier_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=True, logger=True
+        )
+        self.dim_wise_kld = dim_wise_kld
+        self.hierarchical_kl = hierarchical_kl
+        opt.step()
+        return beta_vae_loss
+
 
 
 

@@ -235,3 +235,4 @@ class HierInitialEncoder(nn.Module):
         hier_dist_concat = torch.cat((mu_tensor, logvar_tensor), axis=1)  # B, len(hier_groups)*2
 
         return level0, hier_dist_concat
+
