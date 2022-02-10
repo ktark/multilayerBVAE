@@ -118,7 +118,7 @@ class VAEhier(pl.LightningModule):
         self.loss_function = loss_function
         self.level0_training_start_iter = torch.tensor(level0_training_start_iter)
         self.level0_beta_vae = 0
-        self.l1_regularization = 0.0001
+        self.l1_regularization = 1
         self.dim_wise_kld = []
         self.hierarchical_kl = []
         self.zeta0 = zeta0
@@ -188,7 +188,8 @@ class VAEhier(pl.LightningModule):
         recon_loss_levels = reconstruction_loss(torch.sigmoid(x_recon_hier), x_recon, self.decoder_dist)
 
         total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
-
+        l2_loss_additional = 0
+        l1_loss_additional = 0
         total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
         latent_recon = 0
         if self.loss_function == 'bvae_latent':
@@ -213,6 +214,13 @@ class VAEhier(pl.LightningModule):
         if self.loss_function == 'bvae':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
                             self.delta * total_kld_hier.abs()
+        if self.loss_function == 'bvae_l1l2':
+            l1_loss_additional = (sum(torch.sum(p.abs()) for p in self.encoder.additional_encoders.parameters()))
+            l2_loss_additional = (sum(torch.norm(p) for p in self.encoder.additional_encoders.parameters()))
+            beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + self.l1_regularization*l1_loss_additional + 10*l2_loss_additional
+
+
 
         if self.loss_function == 'bvae_corr':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
@@ -279,7 +287,7 @@ class VAEhier(pl.LightningModule):
 
             # L1 regularization for additional layers
             l1_loss_additional = (sum(torch.sum(p.abs()) for p in self.encoder.additional_encoders.parameters()))
-
+            l2_loss_additional = (sum(torch.norm(p) for p in self.encoder.additional_encoders.parameters()))
             # get loss
             beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
                             self.delta * kl_layers.abs() + self.l1_regularization * l1_loss_additional
@@ -297,7 +305,9 @@ class VAEhier(pl.LightningModule):
             'train/recon_loss_hier': recon_loss_hier,
             'train/C_anneal_level0': C_anneal_level0,
             'train/latent_recon': latent_recon,
-            'train/mean_corr': corr
+            'train/mean_corr': corr,
+            'train/l1': l1_loss_additional,
+            'train/l2': l2_loss_additional
 
         }
         for idx, val in enumerate(dim_wise_kld):
@@ -590,142 +600,182 @@ class VAEmulti(pl.LightningModule):
         self.encoder_level1_0 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32,32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4*2)
         )
         self.encoder_level1_1 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_2 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_3 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_4 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_5 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_6 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_7 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_8 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_9 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_10 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_11 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_12 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_13 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_14 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_15 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_16 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_17 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_18 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
 
         self.encoder_level1_19 = nn.Sequential(
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 32),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(32, 4 * 2)
         )
 
@@ -817,6 +867,7 @@ class VAEmulti(pl.LightningModule):
         recon_loss_levels = reconstruction_loss(torch.sigmoid(x_recon_hier), x_recon, self.decoder_dist)
 
         total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
+
 
         total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
         latent_recon = 0

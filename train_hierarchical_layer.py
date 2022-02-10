@@ -44,7 +44,7 @@ def main(hparams):
              f'loss: {hparams.loss_function}|'
              f'lat_recon: {hparams.laten_recon_coef}|'
              f'lr: {hparams.lr}',
-        project='thesis', job_type='train', log_model="all", sync_tensorboard=True)
+        project='thesis', job_type='train', log_model=True, sync_tensorboard=True)
 
     wandb_logger.watch(vae, log_freq=1000, log_graph=True)  # log network topology and weights
 

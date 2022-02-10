@@ -3,10 +3,8 @@ from src.modules import *
 from pytorch_lightning.callbacks import Callback, ModelSummary
 from torchvision.utils import make_grid
 from PIL import Image, ImageFont, ImageDraw
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
-from matplotlib.pyplot import imshow, figure, show
 from torchvision import transforms
 
 
@@ -137,9 +135,11 @@ class ImagePredictionLogger(Callback):
                 pred_level0 = pl_module.decoder(z_level0.to(pl_module.device)).cpu()
 
             level1_recon = torch.sigmoid(pred_level1).data
+            level1_recon = (level1_recon - torch.min(level1_recon)).div(torch.max(level1_recon) - torch.min(level1_recon))
             level1_recon_pad = nn.functional.pad(level1_recon, pad=[4, 4, 4, 4], value=0.0)
 
             level0_recon = torch.sigmoid(pred_level0).data
+            level0_recon = (level0_recon - torch.min(level0_recon)).div(torch.max(level0_recon) - torch.min(level0_recon))
             level0_recon_pad = nn.functional.pad(level0_recon, pad=[4, 4, 4, 4], value=1.0)
 
             orig_pad = nn.functional.pad(val_imgs.cpu(), pad=[4, 4, 4, 4], value=0.5)
@@ -147,7 +147,7 @@ class ImagePredictionLogger(Callback):
             recon_img = [orig_pad, level0_recon_pad, level1_recon_pad]
 
             print_orig_recon = torch.cat(recon_img, dim=0).cpu()
-            recon_image = make_grid(print_orig_recon, normalize=True, scale_each=True, nrow=1, pad_value=1)
+            recon_image = make_grid(print_orig_recon, normalize=False, scale_each=True, nrow=1, pad_value=1)
             recon_image = recon_image.permute(1, 2, 0)
             # Log the images as wandb Image
             self.wandb_logger.log_image('train_images/test_image_recon_' + str(self.sample), [(recon_image.numpy())])
@@ -275,7 +275,7 @@ class ImagePredictionLoggerSingleDecoder(Callback):
             recon_img = [orig_pad, level0_recon_pad, level1_recon_pad]
 
             print_orig_recon = torch.cat(recon_img, dim=0).cpu()
-            recon_image = make_grid(print_orig_recon, normalize=True, scale_each=True, nrow=1, pad_value=1)
+            recon_image = make_grid(print_orig_recon, normalize=False, scale_each=True, nrow=1, pad_value=1)
             recon_image = recon_image.permute(1, 2, 0)
             # Log the images as wandb Image
             self.wandb_logger.log_image('train_images/test_image_recon_' + str(self.sample), [(recon_image.numpy())])
@@ -331,6 +331,7 @@ class ImagePredictionLoggerHierarchy(Callback):
                     with torch.no_grad():
                         pred = pl_module.decoder_level1(z_copy.to(pl_module.device)).cpu()
                     sigm_pred = torch.sigmoid(pred).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
                     print_images_level1.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=0.0))
                 print_images_level1.append(torch.from_numpy(hier_kl_images[i]))
 
@@ -343,6 +344,7 @@ class ImagePredictionLoggerHierarchy(Callback):
                     with torch.no_grad():
                         pred = pl_module.decoder(z_copy.to(pl_module.device)).cpu()
                     sigm_pred = torch.sigmoid(pred).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
                     print_images_level0.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=1.0))
                 print_images_level0.append(torch.from_numpy(kl_images[i]))
 
@@ -358,7 +360,7 @@ class ImagePredictionLoggerHierarchy(Callback):
                 level1_counter += 13
 
             merged_image_cat = torch.cat(merged_image, dim=0).cpu()
-            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=13, pad_value=1)
+            merged_image_grid = make_grid(merged_image_cat, normalize=False, scale_each=True, nrow=13, pad_value=1)
 
             self.wandb_logger.log_image('train_images/hier_image_z_' + str(self.sample),
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
@@ -412,6 +414,7 @@ class ImagePredictionLoggerHierarchySingleDecoder(Callback):
                         z1_connector = pl_module.l1_connector(z_copy)
                         pred = pl_module.decoder(z1_connector.to(pl_module.device)).cpu()
                     sigm_pred = torch.sigmoid(pred).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
                     print_images_level1.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=0.0))
                 print_images_level1.append(torch.from_numpy(hier_kl_images[i]))
 
@@ -425,6 +428,7 @@ class ImagePredictionLoggerHierarchySingleDecoder(Callback):
                         z0_connector = pl_module.l0_connector(z_copy)
                         pred = pl_module.decoder(z0_connector.to(pl_module.device)).cpu()
                     sigm_pred = torch.sigmoid(pred).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
                     print_images_level0.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=1.0))
                 print_images_level0.append(torch.from_numpy(kl_images[i]))
 
@@ -440,7 +444,7 @@ class ImagePredictionLoggerHierarchySingleDecoder(Callback):
                 level1_counter += 13
 
             merged_image_cat = torch.cat(merged_image, dim=0).cpu()
-            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=13, pad_value=1)
+            merged_image_grid = make_grid(merged_image_cat, normalize=False, scale_each=True, nrow=13, pad_value=1)
 
             self.wandb_logger.log_image('train_images/hier_image_z_' + str(self.sample),
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
@@ -499,7 +503,7 @@ class ImagePredictionLoggerLatentActivation(Callback):
             mu_l1.cpu()
 
             scatter_images = get_scatter_images(pl_module, mu_l0, mu_l1)
-            l0_low, l0_high, l1_low, l1_high = get_visualization_latent_border(trainer, pl_module)
+            l0_low, l0_high, l1_low, l1_high = torch.min(mu_l0, dim=0).values, torch.max(mu_l0, dim=0).values, torch.min(mu_l1, dim=0).values, torch.max(mu_l1, dim=0).values
             l0_low.cpu()
             l0_high.cpu()
             l1_low.cpu()
@@ -511,7 +515,9 @@ class ImagePredictionLoggerLatentActivation(Callback):
                     z_copy[0, i] = z_change
                     with torch.no_grad():
                         pred = pl_module.decoder_level1(z_copy.to(pl_module.device)).cpu()
-                    sigm_pred = torch.sigmoid(pred).data - zero_pred_level1
+                    sigm_pred = torch.sigmoid(pred-pred0_level1).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+
                     print_images_level1.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=0.0))
                 print_images_level1.append(torch.from_numpy(hier_kl_images[i]))
                 print_images_level1.append(torch.zeros_like(torch.from_numpy(hier_kl_images[i])))
@@ -524,7 +530,9 @@ class ImagePredictionLoggerLatentActivation(Callback):
                     z_copy[0, i] = z_change
                     with torch.no_grad():
                         pred = pl_module.decoder(z_copy.to(pl_module.device)).cpu()
-                    sigm_pred = torch.sigmoid(pred).data - zero_pred_level0
+                    sigm_pred = torch.sigmoid(pred-pred0_level0).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+
                     print_images_level0.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=1.0))
                 print_images_level0.append(torch.from_numpy(kl_images[i]))
                 print_images_level0.append(scatter_images[i])
@@ -542,7 +550,7 @@ class ImagePredictionLoggerLatentActivation(Callback):
                 level1_counter += 14
 
             merged_image_cat = torch.cat(merged_image, dim=0).cpu()
-            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=14, pad_value=1)
+            merged_image_grid = make_grid(merged_image_cat, normalize=False, scale_each=True, nrow=14, pad_value=1)
             self.wandb_logger.log_image('train_images/latent_info_' + str(self.sample),
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
@@ -640,7 +648,7 @@ class ImagePredictionLoggerLatentActivationLayers(Callback):
             mu_l1.cpu()
 
             scatter_images = get_scatter_images_layer(pl_module, mu_l0, mu_l1)
-            l0_low, l0_high, l1_low, l1_high = get_visualization_latent_border(trainer, pl_module)
+            l0_low, l0_high, l1_low, l1_high = torch.min(mu_l0, dim=0).values, torch.max(mu_l0, dim=0).values, torch.min(mu_l1, dim=0).values, torch.max(mu_l1, dim=0).values
             l0_low.cpu()
             l0_high.cpu()
             l1_low.cpu()
@@ -652,7 +660,8 @@ class ImagePredictionLoggerLatentActivationLayers(Callback):
                     z_copy[0, i] = z_change
                     with torch.no_grad():
                         pred = pl_module.decoder(z_copy.to(pl_module.device)).cpu()
-                    sigm_pred = torch.sigmoid(pred).data - zero_pred_level0
+                    sigm_pred = torch.sigmoid(pred-pred0_level0).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred)) #normalize
                     print_images_level0.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=0.0))
                 print_images_level0.append(torch.from_numpy(hier_kl_images[i]))
                 print_images_level0.append(torch.zeros_like(torch.from_numpy(hier_kl_images[i])))
@@ -665,7 +674,8 @@ class ImagePredictionLoggerLatentActivationLayers(Callback):
                     z_copy[0, i] = z_change
                     with torch.no_grad():
                         pred = pl_module.decoder_level1(z_copy.to(pl_module.device)).cpu()
-                    sigm_pred = torch.sigmoid(pred).data - zero_pred_level1
+                    sigm_pred = torch.sigmoid(pred-pred0_level1).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))  # normalize
                     print_images_level1.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=1.0))
                 print_images_level1.append(torch.from_numpy(kl_images[i]))
                 print_images_level1.append(scatter_images[i])
@@ -683,7 +693,7 @@ class ImagePredictionLoggerLatentActivationLayers(Callback):
                 level0_counter += 14
 
             merged_image_cat = torch.cat(merged_image, dim=0).cpu()
-            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=14, pad_value=1)
+            merged_image_grid = make_grid(merged_image_cat, normalize=False, scale_each=True, nrow=14, pad_value=1)
             self.wandb_logger.log_image('train_images/latent_info_' + str(self.sample),
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
@@ -825,6 +835,7 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
                         reconst_z1 = pl_module.decoder_level1(z_img).cpu()
                     # to cpu
                     reconst_z1_sigm = torch.sigmoid(reconst_z1).data - zero_pred_level1.cpu()
+                    reconst_z1_sigm = (reconst_z1_sigm - torch.min(reconst_z1_sigm)).div(torch.max(reconst_z1_sigm) - torch.min(reconst_z1_sigm))  # normalize
                     print_images.append(nn.functional.pad(reconst_z1_sigm, pad=[4, 4, 4, 4], value=0.0))
 
                     # l0 reconstr
@@ -835,12 +846,14 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
                     # to cpu
                     reconst_z0 = pl_module.decoder(z0_img).cpu()
                     reconst_z0_sigm = torch.sigmoid(reconst_z0).data - zero_pred_level0.cpu()
+                    reconst_z0_sigm = (reconst_z0_sigm - torch.min(reconst_z0_sigm)).div(torch.max(reconst_z0_sigm) - torch.min(reconst_z0_sigm))  # normalize
+
                     recon_loss_between_layers = F.mse_loss(reconst_z1_sigm.cpu(), reconst_z0_sigm.cpu(), reduction='sum')
 
                     print_images.append(nn.functional.pad(reconst_z0_sigm, pad=[4, 4, 4, 4], value=1.0))
                     print_images.append(torch.from_numpy(create_text_image(str(i) + ": "+str(recon_loss_between_layers.item()))))
             merged_image_cat = torch.cat(print_images, dim=0).cpu()
-            merged_image_grid = make_grid(merged_image_cat, normalize=True, scale_each=True, nrow=3, pad_value=1)
+            merged_image_grid = make_grid(merged_image_cat, normalize=False, scale_each=True, nrow=3, pad_value=1)
             self.wandb_logger.log_image('train_images/latent_info_merged',
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
@@ -967,6 +980,7 @@ def get_visualization_latent_border(trainer, pl_module):
 
 
 
+from matplotlib.ticker import FormatStrFormatter
 
 def get_scatter_images(pl_module, mu, mu_hier):
     images_list = []
@@ -982,8 +996,9 @@ def get_scatter_images(pl_module, mu, mu_hier):
             fig.set_size_inches(2, 2)
             ax = fig.gca()
 
-            ax.scatter(mu.T[l0_idx].cpu().detach().numpy(), mu_hier.T[lat1_idx].cpu().detach().numpy(), c='green',
+            ax.scatter(mu_hier.T[lat1_idx].cpu().detach().numpy(),mu.T[l0_idx].cpu().detach().numpy(),c='green',
                        alpha=0.5)
+            ax.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
             ax.tick_params(axis='x', labelsize=15)
             ax.tick_params(axis='y', labelsize=15)
             ax.set_title(":{:.5f}".format(corr_coefficient), size=18, pad=-15)
@@ -1017,8 +1032,9 @@ def get_scatter_images_layer(pl_module, mu, mu_hier):
             fig.set_size_inches(2, 2)
             ax = fig.gca()
 
-            ax.scatter(mu.T[lat1_idx].cpu().detach().numpy(), mu_hier.T[lat1_idx*4+l0_idx].cpu().detach().numpy(), c='green',
+            ax.scatter(mu_hier.T[lat1_idx*4+l0_idx].cpu().detach().numpy(),mu.T[lat1_idx].cpu().detach().numpy(), c='green',
                        alpha=0.5)
+            ax.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
             ax.tick_params(axis='x', labelsize=15)
             ax.tick_params(axis='y', labelsize=15)
             ax.set_title(":{:.5f}".format(corr_coefficient), size=18, pad=-15)
