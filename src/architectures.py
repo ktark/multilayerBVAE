@@ -156,13 +156,19 @@ class VAEhier(pl.LightningModule):
         mu = distributions[:, :self.latent_dim_level0]
         logvar = distributions[:, self.latent_dim_level0:]
 
-        z = reparametrize(mu, logvar)
-        x_recon = self.decoder(z).view(x.size())
-
         mu_hier = hier_dist_concat[:, :self.latent_dim_level1]
         logvar_hier = hier_dist_concat[:, self.latent_dim_level1:]
+        print(logvar_hier.size(), torch.tensor(self.hier_groups).size())
+        eps_parent, eps_child = reparametrize_eps(logvar_hier.size(), torch.tensor(self.hier_groups))
+        std = logvar.div(2).exp()
+        z = mu + std*eps_child*0.8 + std*std.data.new(std.size()).normal_().detach()*0.2
+        # z = reparametrize(mu, logvar)
+        x_recon = self.decoder(z).view(x.size())
 
-        z_hier = reparametrize(mu_hier, logvar_hier)
+
+
+        z_hier = mu_hier + logvar_hier.div(2).exp()*eps_parent
+        #z_hier = reparametrize(mu_hier, logvar_hier)
         x_recon_hier = self.decoder_level1(z_hier).view(x.size())
 
         return x_recon, mu, logvar, x_recon_hier, mu_hier, logvar_hier

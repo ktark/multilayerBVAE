@@ -325,7 +325,8 @@ class ImagePredictionLoggerHierarchy(Callback):
             l1_high.cpu()
             z_level1_size = z_level1.size(1)
             for i in np.arange(0, z_level1_size, 1):
-                for z_change in np.linspace(l1_low[i].item(), l1_high[i].item(), 12): #(np.arange(-3, 3, 0.5)):
+#                for z_change in np.linspace(l1_low[i].item(), l1_high[i].item(), 12):  # (np.arange(-3, 3, 0.5)):
+                for z_change in (np.arange(-3, 3, 0.5)):
                     z_copy = z_level1.clone()
                     z_copy[0, i] = z_change
                     with torch.no_grad():
@@ -338,7 +339,8 @@ class ImagePredictionLoggerHierarchy(Callback):
             # Lower level images
             z_level0_size = z_level0.size(1)
             for i in np.arange(0, z_level0_size, 1):
-                for z_change in np.linspace(l0_low[i].item(), l0_high[i].item(), 12): #(np.arange(-3, 3, 0.5)):
+#                for z_change in np.linspace(l0_low[i].item(), l0_high[i].item(), 12): #(np.arange(-3, 3, 0.5)):
+                for z_change in (np.arange(-3, 3, 0.5)):
                     z_copy = z_level0.clone()
                     z_copy[0, i] = z_change
                     with torch.no_grad():

@@ -31,8 +31,9 @@ def reparametrize(mu, logvar):
 #returns eps for parent, child level. Child level eps same as parent
 def reparametrize_eps(parent_size, child_repeats):
     ztorch = torch.zeros(parent_size).detach()
-    eps = ztorch.data.new(ztorch.size()).normal_().detach()
-    eps_child = eps.repeat_interleave(child_repeats, dim=0).detach()
+    child_repeats = child_repeats.cuda()
+    eps = ztorch.data.new(ztorch.size()).normal_().detach().cuda()
+    eps_child = eps.repeat_interleave(child_repeats, dim=1).detach().cuda()
     return eps, eps_child
 
 # Get log loss (1 channel - bernoulli, 3 channels gaussian)
