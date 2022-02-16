@@ -14,7 +14,7 @@ from os.path import isfile, join
 
 class Dsprites(Dataset):
     def __init__(self):
-        data = np.load('./data/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz', encoding='bytes', mmap_mode='r')
+        data = np.load('./dataset/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz', encoding='bytes', mmap_mode='r')
         self.train_data = data['imgs'][0:len(data['imgs'])]
 
     def __getitem__(self, item):

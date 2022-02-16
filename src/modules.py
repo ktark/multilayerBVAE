@@ -100,7 +100,7 @@ class BoxHeadSmallEncoder(nn.Module):
             nn.LeakyReLU(0.3),
             nn.Dropout(p=0.1),
             nn.BatchNorm2d(512),
-            View((-1, 512 * 3 * 3)),  # B, 2048
+            View((-1, 512 * 3 * 3)),  # B, 2048 #changed to nc
             nn.Linear(4608, 1024),  # B, 1024
             nn.Dropout(p=0.3),
             nn.BatchNorm1d(1024),
@@ -148,7 +148,7 @@ class BoxHeadSmallDecoder(nn.Module):
             nn.ConvTranspose2d(128, 64, 4, 1, 2),
             nn.LeakyReLU(0.3),
             nn.Dropout(p=0.1),
-            nn.ConvTranspose2d(64, 3, 4, 2),
+            nn.ConvTranspose2d(64, self.nc, 4, 2), #changed 3 to nc
             nn.LeakyReLU(0.1),
             nn.Dropout(p=0.1),
 

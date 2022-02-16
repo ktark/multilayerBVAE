@@ -21,26 +21,26 @@ def main(hparams):
     print(hparams)
     if hparams.dataset == "dsprites":
         ds = Dsprites()
-        vae = VAEh(nc=1, decoder_dist='bernoulli', latent_dim=int(hparams.latent_dim), input_height=64,
+        vae = BVAE(nc=1, decoder_dist='bernoulli', latent_dim=int(hparams.latent_dim), input_height=64,
                    gamma=int(hparams.gamma),
-                   max_iter=int(hparams.max_steps), lr=3e-4,
+                   max_iter=int(hparams.max_steps), lr=5e-4,
                    beta1=0.9, beta2=0.999, C_min=float(hparams.C_min),
-                   C_max=float(hparams.C_max), C_stop_iter=int(hparams.C_stop_iter), reparemeters_coef=float(hparams.reparameters_coef))
+                   C_max=float(hparams.C_max), C_stop_iter=int(hparams.C_stop_iter), reparameters_coef=float(hparams.reparameters_coef))
 
     else:
         ds = BoxHead(dataset=hparams.dataset)
-        vae = VAEh(nc=3, decoder_dist='gaussian', latent_dim=int(hparams.latent_dim), input_height=64,
+        vae = BVAE(nc=3, decoder_dist='gaussian', latent_dim=int(hparams.latent_dim), input_height=64,
                    gamma=int(hparams.gamma),
-                   max_iter=int(hparams.max_steps), lr=3e-4,
+                   max_iter=int(hparams.max_steps), lr=5e-4,
                    beta1=0.9, beta2=0.999, C_min=float(hparams.C_min),
-                   C_max=float(hparams.C_max), C_stop_iter=int(hparams.C_stop_iter),  reparemeters_coef=float(hparams.reparameters_coef))
+                   C_max=float(hparams.C_max), C_stop_iter=int(hparams.C_stop_iter),  reparameters_coef=float(hparams.reparameters_coef))
 
     ds_dl = DataLoader(ds, batch_size=64, shuffle=True, num_workers=8, persistent_workers=True)
 
 
 
     wandb_logger = WandbLogger(
-        name=f'One level latent: ds {hparams.dataset} | '
+        name=f'BVAE: ds {hparams.dataset} | '
              f'gamma/betaVAE {str(hparams.gamma)} | '
              f'C: {str(hparams.C_min)}-{str(hparams.C_max)}/{str(hparams.C_stop_iter)} | '
              f'latents: {str(hparams.latent_dim)} |'
@@ -50,8 +50,10 @@ def main(hparams):
         project='thesis', job_type='train', log_model=False)
 
     # wandb_logger.watch(vae, log_freq=10000)  # log network topology and weights
-    epoch_end_example_image_S = ImagePredictionLogger2(sample=6, ds=ds, wandb_logger=wandb_logger)  # Square
-    epoch_end_example_image_S2 = ImagePredictionLogger2(sample=400, ds=ds, wandb_logger=wandb_logger)  # Square
+    epoch_end_example_image_S = ImagePredictionLogger2(sample=125140, ds=ds, wandb_logger=wandb_logger)  # Square
+    epoch_end_example_image_S2 = ImagePredictionLogger2(sample=333500, ds=ds, wandb_logger=wandb_logger)  # Ellipse
+    epoch_end_example_image_S3 = ImagePredictionLogger2(sample=578560, ds=ds, wandb_logger=wandb_logger)  # Ellipse
+
     #mu_val_logger = get_first_images_mu_logger(ds, wandb_logger)
 
     wandb_logger.watch(vae, log_freq=1000)  # log network topology and weights
@@ -60,7 +62,10 @@ def main(hparams):
                          enable_progress_bar = False,
                          logger=wandb_logger, callbacks=[ModelSummary(max_depth=-1),
                                                          epoch_end_example_image_S,
-                                                         epoch_end_example_image_S2#,
+                                                         epoch_end_example_image_S2,
+                                                         epoch_end_example_image_S3
+
+                                                         #,
  #                                                        mu_val_logger
                                                          ])
     trainer.fit(vae, ds_dl)

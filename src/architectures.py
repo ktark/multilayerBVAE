@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 
 class VAEh(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim=10, input_height=64, nc=1, decoder_dist='bernoulli',
-                 gamma=100, max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0.0, C_max=20.0, C_stop_iter=1e5):
+                 gamma=100, max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0.0, C_max=20.0, C_stop_iter=1e5, reparemeters_coef=1.0):
         super().__init__()
         self.latent_dim = latent_dim
         self.decoder_dist = decoder_dist
@@ -20,6 +20,7 @@ class VAEh(pl.LightningModule):
         # needs to be converted to FloatTensor on cuda
         self.C_min = torch.FloatTensor([C_min]).cuda()
         self.C_max = torch.FloatTensor([C_max]).cuda()
+        self.reparemeters_coef = reparemeters_coef
 
         self.automatic_optimization = False  # turn off pytorch optimizer
 
@@ -44,7 +45,26 @@ class VAEh(pl.LightningModule):
         distributions = self.encoder(x)
         mu = distributions[:, :self.latent_dim]
         logvar = distributions[:, self.latent_dim:]
-        z = reparametrize(mu, logvar)
+
+        mu_first = mu[:, :int(self.latent_dim / 2)]
+        logvar_first = logvar[:, :int(self.latent_dim / 2)]
+
+
+        mu_second = mu[:, int(self.latent_dim / 2):]
+        logvar_second = logvar[:, int(self.latent_dim / 2):]
+
+        eps_parent, eps_child = reparametrize_eps(logvar_first[:,0:1].size(), torch.tensor([int(self.latent_dim/2)]))
+
+        #std_first = logvar_first.div(2).exp()
+        std_second = logvar_second.div(2).exp()
+
+        z_first = reparametrize(mu_first, logvar_first)
+        z_second = mu_second + std_second * eps_child * (1 - self.reparameters_coef) + std_second * std_second.data.new(std_second.size()).normal_().detach() * self.reparameters_coef
+        z = torch.cat((z_first, z_second), dim=1)
+
+        #z = reparametrize(mu, logvar)
+
+
         x_recon = self.decoder(z).view(x.size())
         return x_recon, mu, logvar
 
@@ -89,12 +109,144 @@ class VAEh(pl.LightningModule):
         return beta_vae_loss
 
 
+class BVAE(pl.LightningModule):
+    def __init__(self, enc_out_dim=512, latent_dim=10, input_height=64, nc=1, decoder_dist='bernoulli',
+                 gamma=100, max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0.0, C_max=20.0, C_stop_iter=1e5, reparameters_coef=1.0):
+        super().__init__()
+        self.latent_dim = latent_dim
+        self.decoder_dist = decoder_dist
+        self.C_stop_iter = C_stop_iter
+        self.global_iter = 0
+        self.gamma = gamma
+        self.max_iter = max_iter
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.nc = nc
+        # needs to be converted to FloatTensor on cuda
+        self.C_min = torch.FloatTensor([C_min]).cuda()
+        self.C_max = torch.FloatTensor([C_max]).cuda()
+
+        self.automatic_optimization = False  # turn off pytorch optimizer
+        self.reparameters_coef = reparameters_coef
+
+        # model architecture
+        self.encoder = nn.Sequential(
+            nn.Conv2d(nc, 32, 4, 2, 1),  # B,  32, 32, 32
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 4, 2, 1),  # B,  32, 16, 16
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 4, 2, 1),  # B,  32,  8,  8
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 4, 2, 1),  # B,  32,  4,  4
+            nn.ReLU(True),
+            View((-1, 32 * 4 * 4)),  # B, 512
+            nn.Linear(32 * 4 * 4, 256),  # B, 256
+            nn.ReLU(True),
+            nn.Linear(256, 256),  # B, 256
+            nn.ReLU(True),
+            nn.Linear(256, self.latent_dim * 2),  # B, z_dim*2
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(self.latent_dim, 256),  # B, 256
+            nn.ReLU(True),
+            nn.Linear(256, 256),  # B, 256
+            nn.ReLU(True),
+            nn.Linear(256, 32 * 4 * 4),  # B, 512
+            nn.ReLU(True),
+            View((-1, 32, 4, 4)),  # B,  32,  4,  4
+            nn.ConvTranspose2d(32, 32, 4, 2, 1),  # B,  32,  8,  8
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 32, 4, 2, 1),  # B,  32, 16, 16
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 32, 4, 2, 1),  # B,  32, 32, 32
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, nc, 4, 2, 1),  # B,  nc, 64, 64
+        )
+        # log hyperparameters
+        self.save_hyperparameters()
+
+        # Initialize weights
+        self.weight_init()
+
+    def weight_init(self):
+        for block in self._modules:
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def forward(self, x):
+        distributions = self.encoder(x)
+        mu = distributions[:, :self.latent_dim]
+        logvar = distributions[:, self.latent_dim:]
+
+
+        if self.reparameters_coef < 1.0:
+            mu_first = mu[:, :int(self.latent_dim / 2)]
+            logvar_first = logvar[:, :int(self.latent_dim / 2)]
+            mu_second = mu[:, int(self.latent_dim / 2):]
+            logvar_second = logvar[:, int(self.latent_dim / 2):]
+
+            eps_parent, eps_child = reparametrize_eps(logvar_first[:, 0:1].size(), torch.tensor([int(self.latent_dim / 2)]))
+
+            # std_first = logvar_first.div(2).exp()
+            std_second = logvar_second.div(2).exp()
+
+            z_first = reparametrize(mu_first, logvar_first)
+            z_second = mu_second + std_second * eps_child * (1 - self.reparameters_coef) + std_second * std_second.data.new(
+                std_second.size()).normal_().detach() * self.reparameters_coef
+            z = torch.cat((z_first, z_second), dim=1)
+        else:
+            z = reparametrize(mu, logvar)
+        x_recon = self.decoder(z).view(x.size())
+        return x_recon, mu, logvar
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+
+    def training_step(self, batch, batch_idx):
+        batch_size = batch.size(dim=0)
+        x = batch.float()
+        x = x.detach()
+        self.global_iter = self.trainer.global_step + 1
+
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        x_recon, mu, logvar = self(x)
+        recon_loss = reconstruction_loss(x, x_recon, self.decoder_dist)
+        total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
+
+        # calculate C value
+        C = torch.clamp((self.C_max / self.C_stop_iter) * self.global_iter, self.C_min, self.C_max.data[0])
+        beta_vae_loss = recon_loss + self.gamma * (total_kld - C).abs()
+
+        beta_vae_loss.backward()
+        opt.step()
+
+        logs = {
+            'beta_vae_loss': beta_vae_loss,
+            'kl': mean_kld,
+            'recon_loss': recon_loss,
+            'C': C,
+            'iter': self.global_iter
+
+        }
+        for idx, val in enumerate(dim_wise_kld):
+            logs['kl ' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=True, logger=True
+        )
+
+        return beta_vae_loss
+
 class VAEhier(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim_level0=12, latent_dim_level1=9, input_height=64, nc=1,
                  hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta0=1, zeta=0.8,
                  delta=0.001,
                  max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
-                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0):
+                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0, reparemeters_coef = 1):
         super().__init__()
         self.latent_dim_level0 = latent_dim_level0
         self.latent_dim_level1 = latent_dim_level1
@@ -122,6 +274,7 @@ class VAEhier(pl.LightningModule):
         self.dim_wise_kld = []
         self.hierarchical_kl = []
         self.zeta0 = zeta0
+        self.reparameters_coef = reparemeters_coef
 
         self.automatic_optimization = False
         # nr of channels in image
@@ -158,17 +311,17 @@ class VAEhier(pl.LightningModule):
 
         mu_hier = hier_dist_concat[:, :self.latent_dim_level1]
         logvar_hier = hier_dist_concat[:, self.latent_dim_level1:]
-        print(logvar_hier.size(), torch.tensor(self.hier_groups).size())
-        eps_parent, eps_child = reparametrize_eps(logvar_hier.size(), torch.tensor(self.hier_groups))
-        std = logvar.div(2).exp()
-        z = mu + std*eps_child*0.8 + std*std.data.new(std.size()).normal_().detach()*0.2
-        # z = reparametrize(mu, logvar)
+        #print(logvar_hier.size(), torch.tensor(self.hier_groups).size())
+        if self.reparameters_coef >= 1.0:
+            z = reparametrize(mu, logvar)
+            z_hier = reparametrize(mu_hier, logvar_hier)
+        else:
+            eps_parent, eps_child = reparametrize_eps(logvar_hier.size(), torch.tensor(self.hier_groups))
+            std = logvar.div(2).exp()
+            z = mu + std*eps_child*(1-self.reparameters_coef) + std*std.data.new(std.size()).normal_().detach()*(self.reparameters_coef)
+            z_hier = mu_hier + logvar_hier.div(2).exp() * eps_parent
+
         x_recon = self.decoder(z).view(x.size())
-
-
-
-        z_hier = mu_hier + logvar_hier.div(2).exp()*eps_parent
-        #z_hier = reparametrize(mu_hier, logvar_hier)
         x_recon_hier = self.decoder_level1(z_hier).view(x.size())
 
         return x_recon, mu, logvar, x_recon_hier, mu_hier, logvar_hier
@@ -194,6 +347,7 @@ class VAEhier(pl.LightningModule):
         recon_loss_levels = reconstruction_loss(torch.sigmoid(x_recon_hier), x_recon, self.decoder_dist)
 
         total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
+
         l2_loss_additional = 0
         l1_loss_additional = 0
         total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
@@ -217,9 +371,26 @@ class VAEhier(pl.LightningModule):
                 self.level0_training_start_iter + 1)
         level0_anneal = torch.clamp(anneal_coef, torch.tensor([0]).item(), torch.tensor([1]).item())
 
+        kld_diff_loss = 0
+
+
+
         if self.loss_function == 'bvae':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
                             self.delta * total_kld_hier.abs()
+
+        if self.loss_function == 'bvae_kld_diff':
+
+            already_visited_idx = 0
+            for idx, k in enumerate(hierarchical_kl):
+                nr_of_child_kl = self.hier_groups[idx]
+                child_kld_sum = torch.sum(dim_wise_kld[already_visited_idx:already_visited_idx + nr_of_child_kl])
+                kld_diff_loss += (k - child_kld_sum) ** 2
+                already_visited_idx += nr_of_child_kl
+            kld_diff_loss = kld_diff_loss / len(self.hier_groups)
+            beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
+                            self.delta * total_kld_hier.abs() + 5000*kld_diff_loss
+
         if self.loss_function == 'bvae_l1l2':
             l1_loss_additional = (sum(torch.sum(p.abs()) for p in self.encoder.additional_encoders.parameters()))
             l2_loss_additional = (sum(torch.norm(p) for p in self.encoder.additional_encoders.parameters()))
@@ -313,7 +484,8 @@ class VAEhier(pl.LightningModule):
             'train/latent_recon': latent_recon,
             'train/mean_corr': corr,
             'train/l1': l1_loss_additional,
-            'train/l2': l2_loss_additional
+            'train/l2': l2_loss_additional,
+            'train/kld_diff_mse': kld_diff_loss
 
         }
         for idx, val in enumerate(dim_wise_kld):
@@ -566,7 +738,7 @@ class VAEmulti(pl.LightningModule):
                  hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta0=1, zeta=0.8,
                  delta=0.001,
                  max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
-                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0):
+                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0, reparemeters_coef = 1.0):
         super().__init__()
         self.latent_dim_level0 = latent_dim_level0
         self.latent_dim_level1 = latent_dim_level1
@@ -594,6 +766,7 @@ class VAEmulti(pl.LightningModule):
         self.dim_wise_kld = []
         self.hierarchical_kl = []
         self.zeta0 = zeta0
+        self.reparameters_coef = reparemeters_coef
 
         self.automatic_optimization = False
         # nr of channels in image
@@ -811,9 +984,6 @@ class VAEmulti(pl.LightningModule):
         mu = distributions[:, :self.latent_dim_level0]
         logvar = distributions[:, self.latent_dim_level0:]
 
-        z = reparametrize(mu, logvar)
-        x_recon = self.decoder(z).view(x.size())
-
         hier0 = self.encoder_level1_0(distributions[:, [0, 20]])
         hier1 = self.encoder_level1_1(distributions[:, [1, 21]])
         hier2 = self.encoder_level1_2(distributions[:, [2, 22]])
@@ -843,11 +1013,29 @@ class VAEmulti(pl.LightningModule):
                               hier6[:, 4:], hier7[:, 4:], hier8[:, 4:], hier9[:, 4:], hier10[:, 4:], hier11[:, 4:],
                               hier12[:, 4:], hier13[:, 4:], hier14[:, 4:], hier15[:, 4:], hier16[:, 4:], hier17[:, 4:],
                               hier18[:, 4:], hier19[:, 4:]), axis=1)
-        # print('cat_hier', cat_hier.shape, hier1.shape, hier2.shape)
+
         mu_hier = cat_hier[:, :self.latent_dim_level1]
         logvar_hier = cat_hier[:, self.latent_dim_level1:]
 
-        z_hier = reparametrize(mu_hier, logvar_hier)
+        if self.reparameters_coef >= 1.0:
+            z = reparametrize(mu, logvar)
+            z_hier = reparametrize(mu_hier, logvar_hier)
+        else:
+            eps_parent, eps_child = reparametrize_eps(logvar_hier.size(), torch.tensor(self.hier_groups))
+            std = logvar.div(2).exp()
+            z = mu + std*eps_child*(1-self.reparameters_coef) + std*std.data.new(std.size()).normal_().detach()*(self.reparameters_coef)
+            z_hier = mu_hier + logvar_hier.div(2).exp() * eps_parent
+
+        #z = reparametrize(mu, logvar)
+        #z_hier = reparametrize(mu_hier, logvar_hier)
+
+        x_recon = self.decoder(z).view(x.size())
+
+
+        # print('cat_hier', cat_hier.shape, hier1.shape, hier2.shape)
+
+
+
         x_recon_hier = self.decoder_level1(z_hier).view(x.size())
 
         return x_recon, mu, logvar, x_recon_hier, mu_hier, logvar_hier

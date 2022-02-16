@@ -20,7 +20,8 @@ class ImagePredictionLogger2(Callback):
     def on_train_epoch_end(self, trainer, pl_module):
         self.epoch_count += 1
 
-        if self.epoch_count % 50 == 1:
+#        if self.epoch_count % 50 == 1:
+        if 1==1:
 
             val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
 

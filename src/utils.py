@@ -28,6 +28,8 @@ def reparametrize(mu, logvar):
     eps = std.data.new(std.size()).normal_().detach()
     return mu + std * eps
 
+
+
 #returns eps for parent, child level. Child level eps same as parent
 def reparametrize_eps(parent_size, child_repeats):
     ztorch = torch.zeros(parent_size).detach()

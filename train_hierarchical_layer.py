@@ -28,7 +28,7 @@ def main(hparams):
                   C_stop_iter=int(hparams.C_stop_iter), hier_groups=hparams.hier_groups,
                   loss_function=hparams.loss_function,
                   level0_training_start_iter=int(hparams.level0_training_start_iter), lr=float(hparams.lr),
-                  laten_recon_coef=int(hparams.laten_recon_coef))
+                  laten_recon_coef=int(hparams.laten_recon_coef), reparemeters_coef=float(hparams.reparameters_coef))
 
     wandb_logger = WandbLogger(
         name=f'P->C | Hierarchy: ds {hparams.dataset} | '
@@ -43,6 +43,7 @@ def main(hparams):
              f'l0_start: {str(hparams.level0_training_start_iter)}|'
              f'loss: {hparams.loss_function}|'
              f'lat_recon: {hparams.laten_recon_coef}|'
+             f'repar_coef: {hparams.reparameters_coef}|'
              f'lr: {hparams.lr}',
         project='thesis', job_type='train', log_model=True, sync_tensorboard=True)
 
@@ -92,6 +93,7 @@ if __name__ == "__main__":
     parser.add_argument("--level0_training_start_iter", default=0)
     parser.add_argument("--lr", default=0.0003)
     parser.add_argument("--laten_recon_coef", default=0)
+    parser.add_argument("--reparameters_coef", default=1.0)
     parser.add_argument("--name", default="")
 
     args = parser.parse_args()
