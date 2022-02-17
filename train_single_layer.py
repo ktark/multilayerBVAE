@@ -23,7 +23,7 @@ def main(hparams):
         ds = Dsprites()
         vae = VAEh(nc=1, decoder_dist='bernoulli', latent_dim=int(hparams.latent_dim), input_height=64,
                    gamma=int(hparams.gamma),
-                   max_iter=int(hparams.max_steps), lr=3e-4,
+                   max_iter=int(hparams.max_steps), lr=5e-4,
                    beta1=0.9, beta2=0.999, C_min=float(hparams.C_min),
                    C_max=float(hparams.C_max), C_stop_iter=int(hparams.C_stop_iter), reparemeters_coef=float(hparams.reparameters_coef))
 

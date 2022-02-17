@@ -369,6 +369,133 @@ class ImagePredictionLoggerHierarchy(Callback):
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
 
+class ImagePredictionLoggerHierarchyForward(Callback):
+    def __init__(self, sample=0, ds=None, wandb_logger=None):
+        super().__init__()
+        self.sample = sample
+        self.ds = ds
+        self.epoch_count = 0
+        self.wandb_logger = wandb_logger
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        self.epoch_count += 1
+
+        if self.epoch_count % 5 == 1:
+
+            val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
+            pl_module.eval()
+
+            distributions = pl_module.encoder(val_imgs)
+            mu_level1 = distributions[:, :pl_module.latent_dim_level0]
+            logvar_level1 = distributions[:, pl_module.latent_dim_level0:]
+
+            hier0 = pl_module.encoder_level1_0(distributions[:, [0, 20]])
+            hier1 = pl_module.encoder_level1_1(distributions[:, [1, 21]])
+            hier2 = pl_module.encoder_level1_2(distributions[:, [2, 22]])
+            hier3 = pl_module.encoder_level1_3(distributions[:, [3, 23]])
+            hier4 = pl_module.encoder_level1_4(distributions[:, [4, 24]])
+            hier5 = pl_module.encoder_level1_5(distributions[:, [5, 25]])
+            hier6 = pl_module.encoder_level1_6(distributions[:, [6, 26]])
+            hier7 = pl_module.encoder_level1_7(distributions[:, [7, 27]])
+            hier8 = pl_module.encoder_level1_8(distributions[:, [8, 28]])
+            hier9 = pl_module.encoder_level1_9(distributions[:, [9, 29]])
+            hier10 = pl_module.encoder_level1_10(distributions[:, [10, 30]])
+            hier11 = pl_module.encoder_level1_11(distributions[:, [11, 31]])
+            hier12 = pl_module.encoder_level1_12(distributions[:, [12, 32]])
+            hier13 = pl_module.encoder_level1_13(distributions[:, [13, 33]])
+            hier14 = pl_module.encoder_level1_14(distributions[:, [14, 34]])
+            hier15 = pl_module.encoder_level1_15(distributions[:, [15, 35]])
+            hier16 = pl_module.encoder_level1_16(distributions[:, [16, 36]])
+            hier17 = pl_module.encoder_level1_17(distributions[:, [17, 37]])
+            hier18 = pl_module.encoder_level1_18(distributions[:, [18, 38]])
+            hier19 = pl_module.encoder_level1_19(distributions[:, [19, 39]])
+
+            cat_hier = torch.cat((hier0[:, :4], hier1[:, :4], hier2[:, :4], hier3[:, :4], hier4[:, :4], hier5[:, :4],
+                                  hier6[:, :4], hier7[:, :4], hier8[:, :4], hier9[:, :4], hier10[:, :4], hier11[:, :4],
+                                  hier12[:, :4], hier13[:, :4], hier14[:, :4], hier15[:, :4], hier16[:, :4],
+                                  hier17[:, :4],
+                                  hier18[:, :4], hier19[:, :4],
+                                  hier0[:, 4:], hier1[:, 4:], hier2[:, 4:], hier3[:, 4:], hier4[:, 4:], hier5[:, 4:],
+                                  hier6[:, 4:], hier7[:, 4:], hier8[:, 4:], hier9[:, 4:], hier10[:, 4:], hier11[:, 4:],
+                                  hier12[:, 4:], hier13[:, 4:], hier14[:, 4:], hier15[:, 4:], hier16[:, 4:],
+                                  hier17[:, 4:],
+                                  hier18[:, 4:], hier19[:, 4:]), axis=1)
+
+            mu_level0 = cat_hier[:, :pl_module.latent_dim_level1]
+            logvar_level0 = cat_hier[:, pl_module.latent_dim_level1:]
+
+
+            # distributions, hier_dist_concat = pl_module.encoder(val_imgs)
+            # mu_level1 = hier_dist_concat[:, :pl_module.latent_dim_level1]
+            # logvar_level1 = hier_dist_concat[:, pl_module.latent_dim_level1:]
+            # mu_level0 = distributions[:, :pl_module.latent_dim_level0]
+            # logvar_level0 = distributions[:, pl_module.latent_dim_level0:]
+
+            _, dim_wise_kld, _ = kl_divergence(mu_level0, logvar_level0)
+
+            _, hierarchical_kl, _ = kl_divergence(mu_level1, logvar_level1)
+
+            z_level1 = mu_level1
+            z_level0 = mu_level0
+
+            print_images_level1 = []
+            print_images_level0 = []
+
+            # Higher level images
+
+            hier_kl_images = create_kl_value_images(hierarchical_kl, mu_level1, logvar_level1, 72,
+                                                    background_color="black", text_color="white")
+            kl_images = create_kl_value_images(dim_wise_kld, mu_level0, logvar_level0, 72)
+            l0_low, l0_high, l1_low, l1_high = get_visualization_latent_border(trainer, pl_module)
+            l0_low.cpu()
+            l0_high.cpu()
+            l1_low.cpu()
+            l1_high.cpu()
+            z_level1_size = z_level1.size(1)
+            for i in np.arange(0, z_level1_size, 1):
+#                for z_change in np.linspace(l1_low[i].item(), l1_high[i].item(), 12):  # (np.arange(-3, 3, 0.5)):
+                for z_change in (np.arange(-3, 3, 0.5)):
+                    z_copy = z_level1.clone()
+                    z_copy[0, i] = z_change
+                    with torch.no_grad():
+                        pred = pl_module.decoder(z_copy.to(pl_module.device)).cpu()
+                    sigm_pred = torch.sigmoid(pred).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+                    print_images_level1.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=0.0))
+                print_images_level1.append(torch.from_numpy(hier_kl_images[i]))
+
+            # Lower level images
+            z_level0_size = z_level0.size(1)
+            for i in np.arange(0, z_level0_size, 1):
+#                for z_change in np.linspace(l0_low[i].item(), l0_high[i].item(), 12): #(np.arange(-3, 3, 0.5)):
+                for z_change in (np.arange(-3, 3, 0.5)):
+                    z_copy = z_level0.clone()
+                    z_copy[0, i] = z_change
+                    with torch.no_grad():
+                        pred = pl_module.decoder_level1(z_copy.to(pl_module.device)).cpu()
+                    sigm_pred = torch.sigmoid(pred).data
+                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+                    print_images_level0.append(nn.functional.pad(sigm_pred, pad=[4, 4, 4, 4], value=1.0))
+                print_images_level0.append(torch.from_numpy(kl_images[i]))
+
+            merged_image = []
+            group_counter = 0
+            level1_counter = 0
+            for idx, group_indices in enumerate(pl_module.hier_groups):
+                for img in print_images_level1[level1_counter:level1_counter + 13]:
+                    merged_image.append(img)
+                for img in print_images_level0[group_counter:group_counter + group_indices * 13]:
+                    merged_image.append(img)
+                group_counter += group_indices * 13
+                level1_counter += 13
+
+            merged_image_cat = torch.cat(merged_image, dim=0).cpu()
+            merged_image_grid = make_grid(merged_image_cat, normalize=False, scale_each=True, nrow=13, pad_value=1)
+
+            self.wandb_logger.log_image('train_images/hier_image_z_' + str(self.sample),
+                                        [(merged_image_grid.permute(1, 2, 0).numpy())])
+            pl_module.train()
+
 
 class ImagePredictionLoggerHierarchySingleDecoder(Callback):
     def __init__(self, sample=0, ds=None, wandb_logger=None):
@@ -941,7 +1068,7 @@ def create_kl_value_images(kl_list, mu_list, logvar_list, img_size=72, text_colo
         str_number0 = str(idx)
         str_number1 = "KL" + ":{:.5f}".format(val)
         str_number2 = "mu" + ":{:.5f}".format(mu_list[0][idx].item())
-        str_number3 = "var" + ":{:.5f}".format(logvar_list[0][idx].item())
+        str_number3 = "sd" + ":{:.5f}".format(logvar_list[0][idx].item())
 
         draw = ImageDraw.Draw(img)
         draw.text(((img_size - w) / 15, (img_size - h) * 0.05), str_number0, font=font, fill=text_color)

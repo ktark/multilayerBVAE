@@ -28,7 +28,7 @@ def main(hparams):
                   C_stop_iter=int(hparams.C_stop_iter), hier_groups=hparams.hier_groups,
                   loss_function=hparams.loss_function,
                   level0_training_start_iter=int(hparams.level0_training_start_iter), lr=float(hparams.lr),
-                  laten_recon_coef=int(hparams.laten_recon_coef), reparemeters_coef=float(hparams.reparameters_coef))
+                  laten_recon_coef=int(hparams.laten_recon_coef), reparameters_coef=float(hparams.reparameters_coef))
 
     wandb_logger = WandbLogger(
         name=f'P->C | Hierarchy: ds {hparams.dataset} | '
@@ -51,17 +51,17 @@ def main(hparams):
 
     epoch_end_example_image_1 = ImagePredictionLoggerLayer(sample=15, ds=ds, wandb_logger=wandb_logger)
     epoch_end_example_image_2 = ImagePredictionLoggerLayer(sample=4, ds=ds, wandb_logger=wandb_logger)
-    #epoch_end_example_image_1_hierarchy = ImagePredictionLoggerHierarchy(sample=4, ds=ds, wandb_logger=wandb_logger)
-    #epoch_end_example_image_2_hierarchy = ImagePredictionLoggerHierarchy(sample=15, ds=ds, wandb_logger=wandb_logger)
+    epoch_end_example_image_1_hierarchy = ImagePredictionLoggerHierarchyForward(sample=4, ds=ds, wandb_logger=wandb_logger)
+    epoch_end_example_image_2_hierarchy = ImagePredictionLoggerHierarchyForward(sample=15, ds=ds, wandb_logger=wandb_logger)
     epoch_end_example_latent_1 = ImagePredictionLoggerLatentActivationLayers(sample=4, ds=ds, wandb_logger=wandb_logger)
     #latentRecreationLogger = ImagePredictionLoggerMergedLatentActivation(wandb_logger=wandb_logger)
     trainer = pl.Trainer(gpus=hparams.gpus, max_steps=int(hparams.max_steps), log_every_n_steps=100,
                          enable_progress_bar=False,
                          logger=wandb_logger, callbacks=[ModelSummary(max_depth=-1),
                                                          epoch_end_example_image_1,
-                                                         #epoch_end_example_image_1_hierarchy,
+                                                         epoch_end_example_image_1_hierarchy,
                                                          epoch_end_example_image_2,
-                                                         #epoch_end_example_image_2_hierarchy,
+                                                         epoch_end_example_image_2_hierarchy,
                                                          epoch_end_example_latent_1])
                                                          #latentRecreationLogger])
                                                          # SaveModelLogger()])
