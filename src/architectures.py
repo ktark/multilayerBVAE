@@ -5,7 +5,8 @@ import pytorch_lightning as pl
 
 class VAEh(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim=10, input_height=64, nc=1, decoder_dist='bernoulli',
-                 gamma=100, max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0.0, C_max=20.0, C_stop_iter=1e5, reparemeters_coef=1.0):
+                 gamma=100, max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0.0, C_max=20.0, C_stop_iter=1e5,
+                 reparemeters_coef=1.0):
         super().__init__()
         self.latent_dim = latent_dim
         self.decoder_dist = decoder_dist
@@ -52,13 +53,15 @@ class VAEh(pl.LightningModule):
             mu_second = mu[:, int(self.latent_dim / 2):]
             logvar_second = logvar[:, int(self.latent_dim / 2):]
 
-            eps_parent, eps_child = reparametrize_eps(logvar_first[:, 0:1].size(), torch.tensor([int(self.latent_dim / 2)]))
+            eps_parent, eps_child = reparametrize_eps(logvar_first[:, 0:1].size(),
+                                                      torch.tensor([int(self.latent_dim / 2)]))
 
             # std_first = logvar_first.div(2).exp()
             std_second = logvar_second.div(2).exp()
 
             z_first = reparametrize(mu_first, logvar_first)
-            z_second = mu_second + std_second * eps_child * (1 - self.reparameters_coef) + std_second * std_second.data.new(
+            z_second = mu_second + std_second * eps_child * (
+                        1 - self.reparameters_coef) + std_second * std_second.data.new(
                 std_second.size()).normal_().detach() * self.reparameters_coef
             z = torch.cat((z_first, z_second), dim=1)
         else:
@@ -109,7 +112,8 @@ class VAEh(pl.LightningModule):
 
 class BVAE(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim=10, input_height=64, nc=1, decoder_dist='bernoulli',
-                 gamma=100, max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0.0, C_max=20.0, C_stop_iter=1e5, reparameters_coef=1.0):
+                 gamma=100, max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0.0, C_max=20.0, C_stop_iter=1e5,
+                 reparameters_coef=1.0):
         super().__init__()
         self.latent_dim = latent_dim
         self.decoder_dist = decoder_dist
@@ -178,20 +182,21 @@ class BVAE(pl.LightningModule):
         mu = distributions[:, :self.latent_dim]
         logvar = distributions[:, self.latent_dim:]
 
-
         if self.reparameters_coef < 1.0:
             mu_first = mu[:, :int(self.latent_dim / 2)]
             logvar_first = logvar[:, :int(self.latent_dim / 2)]
             mu_second = mu[:, int(self.latent_dim / 2):]
             logvar_second = logvar[:, int(self.latent_dim / 2):]
 
-            eps_parent, eps_child = reparametrize_eps(logvar_first[:, 0:1].size(), torch.tensor([int(self.latent_dim / 2)]))
+            eps_parent, eps_child = reparametrize_eps(logvar_first[:, 0:1].size(),
+                                                      torch.tensor([int(self.latent_dim / 2)]))
 
             # std_first = logvar_first.div(2).exp()
             std_second = logvar_second.div(2).exp()
 
             z_first = reparametrize(mu_first, logvar_first)
-            z_second = mu_second + std_second * eps_child * (1 - self.reparameters_coef) + std_second * std_second.data.new(
+            z_second = mu_second + std_second * eps_child * (
+                        1 - self.reparameters_coef) + std_second * std_second.data.new(
                 std_second.size()).normal_().detach() * self.reparameters_coef
             z = torch.cat((z_first, z_second), dim=1)
         else:
@@ -239,12 +244,13 @@ class BVAE(pl.LightningModule):
 
         return beta_vae_loss
 
+
 class VAEhier(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim_level0=12, latent_dim_level1=9, input_height=64, nc=1,
                  hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta0=1, zeta=0.8,
                  delta=0.001,
                  max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
-                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0, reparemeters_coef = 1):
+                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0, reparemeters_coef=1):
         super().__init__()
         self.latent_dim_level0 = latent_dim_level0
         self.latent_dim_level1 = latent_dim_level1
@@ -309,14 +315,15 @@ class VAEhier(pl.LightningModule):
 
         mu_hier = hier_dist_concat[:, :self.latent_dim_level1]
         logvar_hier = hier_dist_concat[:, self.latent_dim_level1:]
-        #print(logvar_hier.size(), torch.tensor(self.hier_groups).size())
+        # print(logvar_hier.size(), torch.tensor(self.hier_groups).size())
         if self.reparameters_coef >= 1.0:
             z = reparametrize(mu, logvar)
             z_hier = reparametrize(mu_hier, logvar_hier)
         else:
             eps_parent, eps_child = reparametrize_eps(logvar_hier.size(), torch.tensor(self.hier_groups))
             std = logvar.div(2).exp()
-            z = mu + std*eps_child*(1-self.reparameters_coef) + std*std.data.new(std.size()).normal_().detach()*(self.reparameters_coef)
+            z = mu + std * eps_child * (1 - self.reparameters_coef) + std * std.data.new(
+                std.size()).normal_().detach() * (self.reparameters_coef)
             z_hier = mu_hier + logvar_hier.div(2).exp() * eps_parent
 
         x_recon = self.decoder(z).view(x.size())
@@ -371,8 +378,6 @@ class VAEhier(pl.LightningModule):
 
         kld_diff_loss = 0
 
-
-
         if self.loss_function == 'bvae':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
                             self.delta * total_kld_hier.abs()
@@ -387,19 +392,17 @@ class VAEhier(pl.LightningModule):
                 already_visited_idx += nr_of_child_kl
             kld_diff_loss = kld_diff_loss / len(self.hier_groups)
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * total_kld_hier.abs() + 5000*kld_diff_loss
+                            self.delta * total_kld_hier.abs() + 5000 * kld_diff_loss
 
         if self.loss_function == 'bvae_l1l2':
             l1_loss_additional = (sum(torch.sum(p.abs()) for p in self.encoder.additional_encoders.parameters()))
             l2_loss_additional = (sum(torch.norm(p) for p in self.encoder.additional_encoders.parameters()))
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * total_kld_hier.abs() + self.l1_regularization*l1_loss_additional + 10*l2_loss_additional
-
-
+                            self.delta * total_kld_hier.abs() + self.l1_regularization * l1_loss_additional + 10 * l2_loss_additional
 
         if self.loss_function == 'bvae_corr':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * total_kld_hier.abs() + corr * self.laten_recon_coef + recon_loss_levels*20
+                            self.delta * total_kld_hier.abs() + corr * self.laten_recon_coef + recon_loss_levels * 20
 
         if self.loss_function == 'bvae_latent':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
@@ -730,13 +733,12 @@ class VAEhierSingleDecoder(pl.LightningModule):
         return beta_vae_loss
 
 
-
 class VAEmulti(pl.LightningModule):
     def __init__(self, enc_out_dim=512, latent_dim_level0=12, latent_dim_level1=9, input_height=64, nc=1,
                  hier_groups=[4, 1, 1, 1, 1, 1, 1, 1, 1], decoder_dist='bernoulli', gamma=100, zeta0=1, zeta=0.8,
                  delta=0.001,
                  max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, C_min=0, C_max=20, C_stop_iter=1e5,
-                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0, reparameters_coef = 1.0):
+                 loss_function='bvae', level0_training_start_iter=0, laten_recon_coef=0, reparameters_coef=1.0):
         super().__init__()
         self.latent_dim_level0 = latent_dim_level0
         self.latent_dim_level1 = latent_dim_level1
@@ -744,7 +746,7 @@ class VAEmulti(pl.LightningModule):
         self.laten_recon_coef = laten_recon_coef
         self.decoder_dist = decoder_dist
         self.hier_groups = hier_groups
-        #print('hier_groups VAEhier', self.hier_groups)
+        # print('hier_groups VAEhier', self.hier_groups)
         self.C_stop_iter = C_stop_iter
         self.global_iter = 0
         self.gamma = gamma
@@ -778,10 +780,10 @@ class VAEmulti(pl.LightningModule):
             nn.Linear(1 * 2, 32),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(32,32),
+            nn.Linear(32, 32),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(32, 4*2)
+            nn.Linear(32, 4 * 2)
         )
         self.encoder_level1_1 = nn.Sequential(
             nn.Linear(1 * 2, 32),
@@ -1023,18 +1025,16 @@ class VAEmulti(pl.LightningModule):
             std = logvar.div(2).exp()
             std_hier = logvar_hier.div(2).exp()
 
-            z_hier = mu_hier + std_hier*eps_child*(1-self.reparameters_coef) + std_hier*std_hier.data.new(std_hier.size()).normal_().detach()*self.reparameters_coef
+            z_hier = mu_hier + std_hier * eps_child * (1 - self.reparameters_coef) + std_hier * std_hier.data.new(
+                std_hier.size()).normal_().detach() * self.reparameters_coef
             z = mu + std * eps_parent
 
-        #z = reparametrize(mu, logvar)
-        #z_hier = reparametrize(mu_hier, logvar_hier)
+        # z = reparametrize(mu, logvar)
+        # z_hier = reparametrize(mu_hier, logvar_hier)
 
         x_recon = self.decoder(z).view(x.size())
 
-
         # print('cat_hier', cat_hier.shape, hier1.shape, hier2.shape)
-
-
 
         x_recon_hier = self.decoder_level1(z_hier).view(x.size())
 
@@ -1061,7 +1061,6 @@ class VAEmulti(pl.LightningModule):
         recon_loss_levels = reconstruction_loss(torch.sigmoid(x_recon_hier), x_recon, self.decoder_dist)
 
         total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
-
 
         total_kld_hier, hierarchical_kl, mean_kld_hier = kl_divergence(mu_hier, logvar_hier)
         latent_recon = 0
@@ -1090,7 +1089,7 @@ class VAEmulti(pl.LightningModule):
 
         if self.loss_function == 'bvae_corr':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
-                            self.delta * total_kld_hier.abs() + corr * self.laten_recon_coef + recon_loss_levels*20
+                            self.delta * total_kld_hier.abs() + corr * self.laten_recon_coef + recon_loss_levels * 20
 
         if self.loss_function == 'bvae_latent':
             beta_vae_loss = self.zeta0 * recon_loss + self.gamma * (total_kld - C).abs() + self.zeta * recon_loss_hier + \
@@ -1192,8 +1191,6 @@ class VAEmulti(pl.LightningModule):
         return beta_vae_loss
 
 
-
-
 def kaiming_init(m):
     if isinstance(m, (nn.Linear, nn.Conv2d)):
         init.kaiming_normal_(m.weight)
@@ -1214,3 +1211,160 @@ def normal_init(m, mean, std):
         m.weight.data.fill_(1)
         if m.bias.data is not None:
             m.bias.data.zero_()
+
+
+class VAEThreeLevel(pl.LightningModule):
+    def __init__(self, latent_dims=[100, 100, 100], nc=1,
+                 decoder_dist='bernoulli', gamma=1.0,
+                 max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, l1_regularization=0.1, l2_regularization=10,
+                 loss_function='bvae'):
+        super().__init__()
+
+        self.decoder_dist = decoder_dist
+
+        self.global_iter = 0
+        self.gamma = gamma
+        self.max_iter = max_iter
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+
+        self.loss_function = loss_function
+        self.l1_regularization = l1_regularization
+        self.l2_regularization = l2_regularization
+        self.latent_dims = latent_dims
+
+        self.dim_wise_kld = []
+        self.hierarchical_kl = []
+
+        self.automatic_optimization = False
+        # nr of channels in image
+        self.nc = nc
+
+        # encoder
+        self.encoder = ThreeLevelEncoder(nc=self.nc, latent_dims=self.latent_dims)
+
+        self.decoder_first_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[0]).decoder
+        self.decoder_second_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[0]).decoder
+        self.decoder_third_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[0]).decoder
+
+        # log hyperparameters
+        self.save_hyperparameters()
+
+        # Initialize weights
+        # self.weight_init()
+        self.init_weights()
+
+    def weight_init(self):
+        for block in self._modules:
+            print(type(self._modules[block]), self._modules[block])
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def init_weights(m):
+        kaiming_init(m)
+
+    def forward(self, x):
+        first_latent, second_latent, third_latent = self.encoder(x)
+
+        mu_first = first_latent[:, :self.latent_dims[0]]
+        logvar_first = first_latent[:, self.latent_dims[0]:]
+
+        mu_second = second_latent[:, :self.latent_dims[1]]
+        logvar_second = second_latent[:, self.latent_dims[1]:]
+
+        mu_third = third_latent[:, :self.latent_dims[2]]
+        logvar_third = third_latent[:, self.latent_dims[2]:]
+
+        z_first = reparametrize(mu_first, logvar_first)
+        z_second = reparametrize(mu_second, logvar_second)
+        z_third = reparametrize(mu_third, logvar_third)
+
+        x_recon_first = self.decoder_first_latent(z_first).view(x.size())
+        x_recon_second = self.decoder_second_latent(z_second).view(x.size())
+        x_recon_third = self.decoder_third_latent(z_third).view(x.size())
+
+        return x_recon_first, mu_first, logvar_first, \
+               x_recon_second, mu_second, logvar_second, \
+               x_recon_third, mu_third, logvar_third
+
+    def configure_optimizers(self):
+        # return torch.optim.Adam(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        return torch.optim.Adamax(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+
+    def training_step(self, batch, batch_idx):
+        x = batch.float()
+        x = x.detach()
+        self.global_iter = self.trainer.global_step + 1
+
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        x_recon_first, mu_first, logvar_first, \
+        x_recon_second, mu_second, logvar_second, \
+        x_recon_third, mu_third, logvar_third = self(x)
+
+        recon_loss_first = reconstruction_loss(x, x_recon_first, self.decoder_dist)
+        recon_loss_second = reconstruction_loss(x, x_recon_second, self.decoder_dist)
+        recon_loss_third = reconstruction_loss(x, x_recon_third, self.decoder_dist)
+
+        total_kld_first, dim_wise_kld_first, mean_kld_first = kl_divergence(mu_first, logvar_first)
+        total_kld_second, dim_wise_kld_second, mean_kld_second = kl_divergence(mu_second, logvar_second)
+        total_kld_third, dim_wise_kld_third, mean_kld_third = kl_divergence(mu_third, logvar_third)
+
+        # if self.loss_function == 'bvae':
+        l1_loss_second_latents = (sum(torch.sum(p.abs()) for p in self.encoder.second_latents.parameters()))
+        l1_loss_third_latents = (sum(torch.sum(p.abs()) for p in self.encoder.third_latents.parameters()))
+
+        l2_loss_second_latents = (sum(torch.norm(p) for p in self.encoder.second_latents.parameters()))
+        l2_loss_third_latents = (sum(torch.norm(p) for p in self.encoder.third_latents.parameters()))
+
+        beta_vae_loss = recon_loss_first + recon_loss_second + recon_loss_third + \
+                        self.gamma * (total_kld_first + total_kld_second + total_kld_third) + \
+                        self.l1_regularization * (l1_loss_second_latents + l1_loss_third_latents) + \
+                        self.l2_regularization * (l2_loss_second_latents + l2_loss_third_latents)
+
+        beta_vae_loss.backward()
+
+        logs = {
+            'train/beta_vae_loss': beta_vae_loss,
+            'train/kl_first': mean_kld_first,
+            'train/kl_second': mean_kld_second,
+            'train/kl_third': mean_kld_third,
+
+            'train/recon_first': recon_loss_first,
+            'train/recon_second': recon_loss_second,
+            'train/recon_third': recon_loss_third,
+
+            'train/iter': self.global_iter,
+
+            'train/l1_second': l1_loss_second_latents,
+            'train/l1_third': l1_loss_third_latents,
+
+            'train/l2_second': l2_loss_second_latents,
+            'train/l2_third': l2_loss_third_latents,
+
+        }
+        for idx, val in enumerate(dim_wise_kld_first):
+            logs['train_kl/kl_first_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        for idx, val in enumerate(dim_wise_kld_second):
+            logs['train_kl/kl_second_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        for idx, val in enumerate(dim_wise_kld_third):
+            logs['train_kl/kl_third_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        opt.step()
+        return beta_vae_loss

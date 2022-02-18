@@ -155,6 +155,49 @@ class BoxHeadSmallDecoder(nn.Module):
         )
 
 
+class SmallDecoder(nn.Module):
+    def __init__(self, nc, latent_dim):
+        super(SmallDecoder, self).__init__()
+        self.nc = nc
+        self.latent_dim = latent_dim
+        self.decoder = nn.Sequential(
+            nn.Linear(self.latent_dim, 1024),  # B, 1024
+            #nn.Dropout(p=0.3),
+            nn.BatchNorm1d(1024),
+            nn.Linear(1024, 4 * 4 * 512),  # B, 256
+            #nn.Dropout(p=0.3),
+            nn.BatchNorm1d(4 * 4 * 512),
+            View((-1, 512, 4, 4)),  # B,  32,  4,  4
+            nn.ConvTranspose2d(512, 256, 4, 2, 1),
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(256),
+
+            nn.ConvTranspose2d(256, 256, 4, 1, 1),
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(256),
+
+            nn.ConvTranspose2d(256, 128, 4, 2, 2),
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(128),
+
+            nn.ConvTranspose2d(128, 128, 4, 2, 1),
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(128),
+
+            nn.ConvTranspose2d(128, 64, 4, 1, 2),
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.ConvTranspose2d(64, self.nc, 4, 2), #changed 3 to nc
+            nn.LeakyReLU(0.1),
+            #nn.Dropout(p=0.1),
+
+        )
+
+
 
 class BoxHeadSmallDecoderFixedInput(nn.Module):
     def __init__(self, nc):
@@ -236,3 +279,59 @@ class HierInitialEncoder(nn.Module):
 
         return level0, hier_dist_concat
 
+
+
+class ThreeLevelEncoder(nn.Module):
+    def __init__(self, nc, latent_dims):
+        super(ThreeLevelEncoder, self).__init__()
+        self.nc = nc
+        self.latent_dims = latent_dims
+        self.encoder = nn.Sequential(
+            nn.Conv2d(self.nc, 64, 4, 2, padding="valid"),  # 1          # B,  32, 32, 64
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(64),
+            nn.Conv2d(64, 128, 4, 2, padding="valid"),  # 1          # B,  16, 16, 128
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(128),
+            nn.Conv2d(128, 256, 2, 2, padding="valid"),  # B,   8,  8, 256
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(256),
+            nn.Conv2d(256, 512, 2, 2, padding="valid"),  # B,  4,  4,  512
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(512),
+            View((-1, 512 * 3 * 3)),  # B, 2048 #changed to nc
+            nn.Linear(4608, 1024)  # B, 1024
+        )
+        self.first_latents = nn.Sequential(
+            #nn.Dropout(p=0.3),
+            nn.BatchNorm1d(1024),
+            nn.Linear(1024, self.latent_dims[0] * 2),  # B, z_dim*2
+        )
+
+        self.second_latents = nn.Sequential(
+                        nn.Linear(self.latent_dims[0] * 2, 1024),
+                        nn.ReLU(),
+                        #nn.Dropout(p=0.3),
+                        nn.Linear(1024, 1024),
+                        nn.ReLU(),
+                        #nn.Dropout(p=0.3),
+                        nn.Linear(1024,self.latent_dims[1] * 2))
+        self.third_latents = nn.Sequential(
+                        nn.Linear(self.latent_dims[1] * 2, 1024),
+                        nn.ReLU(),
+                        #nn.Dropout(p=0.3),
+                        nn.Linear(1024, 1024),
+                        nn.ReLU(),
+                        #nn.Dropout(p=0.3),
+                        nn.Linear(1024,self.latent_dims[2] * 2))
+
+    def forward(self, x):
+        x = self.encoder(x)
+        first_latent = self.first_latents(x)
+        second_latent = self.second_latents(first_latent)
+        third_latent = self.third_latents(second_latent)
+        return first_latent, second_latent, third_latent
