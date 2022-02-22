@@ -1245,8 +1245,8 @@ class VAEThreeLevel(pl.LightningModule):
         self.encoder = ThreeLevelEncoder(nc=self.nc, latent_dims=self.latent_dims)
 
         self.decoder_first_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[0]).decoder
-        self.decoder_second_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[0]).decoder
-        self.decoder_third_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[0]).decoder
+        self.decoder_second_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[1]).decoder
+        self.decoder_third_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[2]).decoder
 
         # log hyperparameters
         self.save_hyperparameters()

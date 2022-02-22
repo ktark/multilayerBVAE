@@ -107,6 +107,18 @@ class SaveModelLogger(Callback):
         trainer.save_checkpoint(file_name)
         # trainer.logger.save(file_name)
 
+class SaveModelEvery50EpochLogger(Callback):
+    def __init__(self):
+        super().__init__()
+        self.epoch_count = 0
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        self.epoch_count += 1
+        if self.epoch_count % 50 == 1:
+            file_name = 'model_epoch_' + str(trainer.global_step) + '.pth'
+            trainer.save_checkpoint(file_name)
+        # trainer.logger.save(file_name)
+
 class SaveFinalModelLogger(Callback):
     def __init__(self):
         super().__init__()
@@ -1256,7 +1268,7 @@ class ImagePredictionLoggerThreeLevel(Callback):
             _, dim_wise_kld_second, _ = kl_divergence(mu_second, logvar_second)
 
             mu_third = third_latent[:, :pl_module.latent_dims[2]]
-            logvar_third = second_latent[:, pl_module.latent_dims[2]:]
+            logvar_third = third_latent[:, pl_module.latent_dims[2]:]
             sd_third = logvar_third.div(2).exp()
             _, dim_wise_kld_third, _ = kl_divergence(mu_third, logvar_third)
 

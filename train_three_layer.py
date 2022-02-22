@@ -51,7 +51,7 @@ def main(hparams):
 
     #mu_val_logger = get_first_images_mu_logger(ds, wandb_logger)
 
-    #wandb_logger.watch(vae, log_freq=1000)  # log network topology and weights
+    wandb_logger.watch(vae, log_freq=10000)  # log network topology and weights
 
     trainer = pl.Trainer(gpus=hparams.gpus,  max_steps=int(hparams.max_steps), log_every_n_steps=100,
                          enable_progress_bar = False,
@@ -59,7 +59,8 @@ def main(hparams):
                                                          epoch_end_example_image_S,
                                                          epoch_end_example_image_S2,
                                                          epoch_end_example_image_S3,
-                                                         SaveFinalModelLogger()
+                                                         SaveFinalModelLogger(),
+                                                         SaveModelEvery50EpochLogger()
                                                          ])
     trainer.fit(vae, ds_dl)
     wandb.finish()

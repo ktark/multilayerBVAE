@@ -313,21 +313,13 @@ class ThreeLevelEncoder(nn.Module):
         )
 
         self.second_latents = nn.Sequential(
-                        nn.Linear(self.latent_dims[0] * 2, 1024),
-                        nn.ReLU(),
-                        #nn.Dropout(p=0.3),
-                        nn.Linear(1024, 1024),
-                        nn.ReLU(),
-                        #nn.Dropout(p=0.3),
-                        nn.Linear(1024,self.latent_dims[1] * 2))
+                        nn.Linear(self.latent_dims[0] * 2, self.latent_dims[0] * 2),
+                        nn.LeakyReLU(0.3),
+                        nn.Linear(self.latent_dims[0] * 2,self.latent_dims[1] * 2))
         self.third_latents = nn.Sequential(
-                        nn.Linear(self.latent_dims[1] * 2, 1024),
-                        nn.ReLU(),
-                        #nn.Dropout(p=0.3),
-                        nn.Linear(1024, 1024),
-                        nn.ReLU(),
-                        #nn.Dropout(p=0.3),
-                        nn.Linear(1024,self.latent_dims[2] * 2))
+                        nn.Linear(self.latent_dims[1] * 2, self.latent_dims[1] * 2),
+                        nn.LeakyReLU(0.3),
+                        nn.Linear(self.latent_dims[1] * 2, self.latent_dims[2] * 2))
 
     def forward(self, x):
         x = self.encoder(x)
