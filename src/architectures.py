@@ -1236,6 +1236,11 @@ class VAEThreeLevel(pl.LightningModule):
 
         self.dim_wise_kld = []
         self.hierarchical_kl = []
+        self.test_mu_latent1 = np.array([])
+        self.test_mu_latent2 =  np.array([])
+        self.test_mu_latent3 =  np.array([])
+        self.gen_params = ['azimuths', 'floor_colors', 'wall_colors', 'eye1_colors', 'eye2_colors', 'eye3_colors',
+                      'eye4_colors', 'box_colors', 'box_sizes']
 
         self.automatic_optimization = False
         # nr of channels in image
@@ -1320,7 +1325,7 @@ class VAEThreeLevel(pl.LightningModule):
         l2_loss_third_latents = (sum(torch.norm(p) for p in self.encoder.third_latents.parameters()))
 
         beta_vae_loss = recon_loss_first + recon_loss_second + recon_loss_third + \
-                        self.gamma * (total_kld_first + total_kld_second + total_kld_third) + \
+                        self.gamma * (total_kld_second + total_kld_third) + \
                         self.l1_regularization * (l1_loss_second_latents + l1_loss_third_latents) + \
                         self.l2_regularization * (l2_loss_second_latents + l2_loss_third_latents)
 
@@ -1368,3 +1373,20 @@ class VAEThreeLevel(pl.LightningModule):
 
         opt.step()
         return beta_vae_loss
+
+    def test_step(self, batch, batch_idx):
+        x = batch.float()
+        x = x.detach()
+
+        _, mu_first, _, \
+        _, mu_second, _, \
+        _, mu_third, _ = self(x)
+
+        self.test_mu_latent1 = np.vstack(
+            [self.test_mu_latent1, mu_first.cpu().numpy()]) if self.test_mu_latent1.size else mu_first.cpu().numpy()
+        self.test_mu_latent2 = np.vstack(
+            [self.test_mu_latent2, mu_second.cpu().numpy()]) if self.test_mu_latent2.size else mu_second.cpu().numpy()
+        self.test_mu_latent3 = np.vstack(
+            [self.test_mu_latent3, mu_third.cpu().numpy()]) if self.test_mu_latent3.size else mu_third.cpu().numpy()
+
+        return (self.test_mu_latent1.shape[0] + self.test_mu_latent2.shape[0] + self.test_mu_latent3.shape[0]) / 3.0

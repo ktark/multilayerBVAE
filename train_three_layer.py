@@ -21,13 +21,15 @@ def main(hparams):
     print(hparams)
 
     ds = BoxHead(dataset=hparams.dataset)
+    ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
+
     vae = VAEThreeLevel(nc=3, decoder_dist='gaussian', latent_dims=hparams.latent_dims,
                gamma=float(hparams.gamma), l1_regularization = float(hparams.l1), l2_regularization = float(hparams.l2),
                max_iter=int(hparams.max_steps), lr=float(hparams.lr),
                beta1=0.9, beta2=0.999)
 
     ds_dl = DataLoader(ds, batch_size=64, shuffle=True, num_workers=8, persistent_workers=True)
-
+    ds_test = DataLoader(ds, batch_size=64, shuffle=False, num_workers=8) #for testing same dataset as training
 
     wandb_logger = WandbLogger(
         name=f'{hparams.name} : ds {hparams.dataset} | '
@@ -51,6 +53,8 @@ def main(hparams):
 
     #mu_val_logger = get_first_images_mu_logger(ds, wandb_logger)
 
+    test_logger = TestImagePredictionLoggerThreeLevel(sample=sample_ids[1], ds=ds, ds_t=ds_t, wandb_logger=wandb_logger)
+
     wandb_logger.watch(vae, log_freq=10000)  # log network topology and weights
 
     trainer = pl.Trainer(gpus=hparams.gpus,  max_steps=int(hparams.max_steps), log_every_n_steps=100,
@@ -60,9 +64,12 @@ def main(hparams):
                                                          epoch_end_example_image_S2,
                                                          epoch_end_example_image_S3,
                                                          SaveFinalModelLogger(),
-                                                         SaveModelEvery50EpochLogger()
+                                                         SaveModelEvery50EpochLogger(),
+                                                         test_logger
                                                          ])
     trainer.fit(vae, ds_dl)
+    trainer.test(vae, ds_test)
+
     wandb.finish()
 
 
