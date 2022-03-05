@@ -61,7 +61,7 @@ class VAEh(pl.LightningModule):
 
             z_first = reparametrize(mu_first, logvar_first)
             z_second = mu_second + std_second * eps_child * (
-                        1 - self.reparameters_coef) + std_second * std_second.data.new(
+                    1 - self.reparameters_coef) + std_second * std_second.data.new(
                 std_second.size()).normal_().detach() * self.reparameters_coef
             z = torch.cat((z_first, z_second), dim=1)
         else:
@@ -196,7 +196,7 @@ class BVAE(pl.LightningModule):
 
             z_first = reparametrize(mu_first, logvar_first)
             z_second = mu_second + std_second * eps_child * (
-                        1 - self.reparameters_coef) + std_second * std_second.data.new(
+                    1 - self.reparameters_coef) + std_second * std_second.data.new(
                 std_second.size()).normal_().detach() * self.reparameters_coef
             z = torch.cat((z_first, z_second), dim=1)
         else:
@@ -1237,10 +1237,10 @@ class VAEThreeLevel(pl.LightningModule):
         self.dim_wise_kld = []
         self.hierarchical_kl = []
         self.test_mu_latent1 = np.array([])
-        self.test_mu_latent2 =  np.array([])
-        self.test_mu_latent3 =  np.array([])
+        self.test_mu_latent2 = np.array([])
+        self.test_mu_latent3 = np.array([])
         self.gen_params = ['azimuths', 'floor_colors', 'wall_colors', 'eye1_colors', 'eye2_colors', 'eye3_colors',
-                      'eye4_colors', 'box_colors', 'box_sizes']
+                           'eye4_colors', 'box_colors', 'box_sizes']
 
         self.automatic_optimization = False
         # nr of channels in image
@@ -1390,3 +1390,239 @@ class VAEThreeLevel(pl.LightningModule):
             [self.test_mu_latent3, mu_third.cpu().numpy()]) if self.test_mu_latent3.size else mu_third.cpu().numpy()
 
         return (self.test_mu_latent1.shape[0] + self.test_mu_latent2.shape[0] + self.test_mu_latent3.shape[0]) / 3.0
+
+
+class VAEFiveLevel(pl.LightningModule):
+    def __init__(self, latent_dims=[100, 100, 100, 100, 100], nc=1,
+                 decoder_dist='bernoulli', gamma=1.0,
+                 max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, l1_regularization=0.1, l2_regularization=10,
+                 loss_function='bvae'):
+        super().__init__()
+
+        self.decoder_dist = decoder_dist
+
+        self.global_iter = 0
+        self.gamma = gamma
+        self.max_iter = max_iter
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+
+        self.loss_function = loss_function
+        self.l1_regularization = l1_regularization
+        self.l2_regularization = l2_regularization
+        self.latent_dims = latent_dims
+
+        self.dim_wise_kld = []
+        self.hierarchical_kl = []
+        self.test_mu_latent1 = np.array([])
+        self.test_mu_latent2 = np.array([])
+        self.test_mu_latent3 = np.array([])
+        self.test_mu_latent4 = np.array([])
+        self.test_mu_latent5 = np.array([])
+
+        self.gen_params = ['azimuths', 'floor_colors', 'wall_colors', 'eye1_colors', 'eye2_colors', 'eye3_colors',
+                           'eye4_colors', 'box_colors', 'box_sizes']
+
+        self.automatic_optimization = False
+        # nr of channels in image
+        self.nc = nc
+
+        # encoder
+        self.encoder = FiveLevelEncoder(nc=self.nc, latent_dims=self.latent_dims)
+
+        self.decoder_first_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[0]).decoder
+        self.decoder_second_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[1]).decoder
+        self.decoder_third_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[2]).decoder
+        self.decoder_forth_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[3]).decoder
+        self.decoder_fifth_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[4]).decoder
+
+        # log hyperparameters
+        self.save_hyperparameters()
+
+        # Initialize weights
+        # self.weight_init()
+        self.init_weights()
+
+    def weight_init(self):
+        for block in self._modules:
+            print(type(self._modules[block]), self._modules[block])
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def init_weights(m):
+        kaiming_init(m)
+
+    def forward(self, x):
+        first_latent, second_latent, third_latent, forth_latent, fifth_latent = self.encoder(x)
+
+        mu_first = first_latent[:, :self.latent_dims[0]]
+        logvar_first = first_latent[:, self.latent_dims[0]:]
+
+        mu_second = second_latent[:, :self.latent_dims[1]]
+        logvar_second = second_latent[:, self.latent_dims[1]:]
+
+        mu_third = third_latent[:, :self.latent_dims[2]]
+        logvar_third = third_latent[:, self.latent_dims[2]:]
+
+        mu_forth = forth_latent[:, :self.latent_dims[3]]
+        logvar_forth = forth_latent[:, self.latent_dims[3]:]
+
+        mu_fifth = fifth_latent[:, :self.latent_dims[4]]
+        logvar_fifth = fifth_latent[:, self.latent_dims[4]:]
+
+        z_first = reparametrize(mu_first, logvar_first)
+        z_second = reparametrize(mu_second, logvar_second)
+        z_third = reparametrize(mu_third, logvar_third)
+
+        z_forth = reparametrize(mu_forth, logvar_forth)
+        z_fifth = reparametrize(mu_fifth, logvar_fifth)
+
+        x_recon_first = self.decoder_first_latent(z_first).view(x.size())
+        x_recon_second = self.decoder_second_latent(z_second).view(x.size())
+        x_recon_third = self.decoder_third_latent(z_third).view(x.size())
+        x_recon_forth = self.decoder_forth_latent(z_forth).view(x.size())
+        x_recon_fifth = self.decoder_fifth_latent(z_fifth).view(x.size())
+
+        return x_recon_first, mu_first, logvar_first, \
+               x_recon_second, mu_second, logvar_second, \
+               x_recon_third, mu_third, logvar_third, \
+               x_recon_forth, mu_forth, logvar_forth, \
+               x_recon_fifth, mu_fifth, logvar_fifth
+
+    def configure_optimizers(self):
+        # return torch.optim.Adam(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        return torch.optim.Adamax(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+
+    def training_step(self, batch, batch_idx):
+        x = batch.float()
+        x = x.detach()
+        self.global_iter = self.trainer.global_step + 1
+
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        x_recon_first, mu_first, logvar_first, \
+        x_recon_second, mu_second, logvar_second, \
+        x_recon_third, mu_third, logvar_third, \
+        x_recon_forth, mu_forth, logvar_forth, \
+        x_recon_fifth, mu_fifth, logvar_fifth = self(x)
+
+        recon_loss_first = reconstruction_loss(x, x_recon_first, self.decoder_dist)
+        recon_loss_second = reconstruction_loss(x, x_recon_second, self.decoder_dist)
+        recon_loss_third = reconstruction_loss(x, x_recon_third, self.decoder_dist)
+        recon_loss_forth = reconstruction_loss(x, x_recon_forth, self.decoder_dist)
+        recon_loss_fifth = reconstruction_loss(x, x_recon_fifth, self.decoder_dist)
+
+        total_kld_first, dim_wise_kld_first, mean_kld_first = kl_divergence(mu_first, logvar_first)
+        total_kld_second, dim_wise_kld_second, mean_kld_second = kl_divergence(mu_second, logvar_second)
+        total_kld_third, dim_wise_kld_third, mean_kld_third = kl_divergence(mu_third, logvar_third)
+        total_kld_forth, dim_wise_kld_forth, mean_kld_forth = kl_divergence(mu_forth, logvar_forth)
+        total_kld_fifth, dim_wise_kld_fifth, mean_kld_fifth = kl_divergence(mu_fifth, logvar_fifth)
+
+
+
+        # if self.loss_function == 'bvae':
+        l1_loss_second_latents = (sum(torch.sum(p.abs()) for p in self.encoder.second_latents.parameters()))
+        l1_loss_third_latents = (sum(torch.sum(p.abs()) for p in self.encoder.third_latents.parameters()))
+        l1_loss_forth_latents = (sum(torch.sum(p.abs()) for p in self.encoder.forth_latents.parameters()))
+        l1_loss_fifth_latents = (sum(torch.sum(p.abs()) for p in self.encoder.fifth_latents.parameters()))
+
+        l2_loss_second_latents = (sum(torch.norm(p) for p in self.encoder.second_latents.parameters()))
+        l2_loss_third_latents = (sum(torch.norm(p) for p in self.encoder.third_latents.parameters()))
+        l2_loss_forth_latents = (sum(torch.norm(p) for p in self.encoder.forth_latents.parameters()))
+        l2_loss_fifth_latents = (sum(torch.norm(p) for p in self.encoder.fifth_latents.parameters()))
+
+        beta_vae_loss = recon_loss_first + recon_loss_second + recon_loss_third + recon_loss_forth + recon_loss_fifth + \
+                        self.gamma * (total_kld_second + total_kld_third + total_kld_forth + total_kld_fifth) + \
+                        self.l1_regularization * (l1_loss_second_latents + l1_loss_third_latents + l1_loss_forth_latents + l1_loss_fifth_latents) + \
+                        self.l2_regularization * (l2_loss_second_latents + l2_loss_third_latents + l2_loss_forth_latents + l2_loss_fifth_latents)
+
+        beta_vae_loss.backward()
+
+        logs = {
+            'train/beta_vae_loss': beta_vae_loss,
+            'train/kl_first': mean_kld_first,
+            'train/kl_second': mean_kld_second,
+            'train/kl_third': mean_kld_third,
+            'train/kl_forth': mean_kld_forth,
+            'train/kl_fifth': mean_kld_fifth,
+
+            'train/recon_first': recon_loss_first,
+            'train/recon_second': recon_loss_second,
+            'train/recon_third': recon_loss_third,
+            'train/recon_forth': recon_loss_forth,
+            'train/recon_fifth': recon_loss_fifth,
+
+            'train/iter': self.global_iter,
+
+            'train/l1_second': l1_loss_second_latents,
+            'train/l1_third': l1_loss_third_latents,
+            'train/l1_forth': l1_loss_forth_latents,
+            'train/l1_fifth': l1_loss_fifth_latents,
+
+            'train/l2_second': l2_loss_second_latents,
+            'train/l2_third': l2_loss_third_latents,
+            'train/l2_forth': l2_loss_second_latents,
+            'train/l2_fifth': l2_loss_third_latents,
+
+        }
+        for idx, val in enumerate(dim_wise_kld_first):
+            logs['train_kl/kl_first_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        for idx, val in enumerate(dim_wise_kld_second):
+            logs['train_kl/kl_second_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        for idx, val in enumerate(dim_wise_kld_third):
+            logs['train_kl/kl_third_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        for idx, val in enumerate(dim_wise_kld_forth):
+            logs['train_kl/kl_forth_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        for idx, val in enumerate(dim_wise_kld_fifth):
+            logs['train_kl/kl_fifth_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        opt.step()
+        return beta_vae_loss
+
+    def test_step(self, batch, batch_idx):
+        x = batch.float()
+        x = x.detach()
+
+        _, mu_first, _, \
+        _, mu_second, _, \
+        _, mu_third, _, \
+        _, mu_forth, _,\
+        _, mu_fifth, _ = self(x)
+
+        self.test_mu_latent1 = np.vstack(
+            [self.test_mu_latent1, mu_first.cpu().numpy()]) if self.test_mu_latent1.size else mu_first.cpu().numpy()
+        self.test_mu_latent2 = np.vstack(
+            [self.test_mu_latent2, mu_second.cpu().numpy()]) if self.test_mu_latent2.size else mu_second.cpu().numpy()
+        self.test_mu_latent3 = np.vstack(
+            [self.test_mu_latent3, mu_third.cpu().numpy()]) if self.test_mu_latent3.size else mu_third.cpu().numpy()
+        self.test_mu_latent4 = np.vstack(
+            [self.test_mu_latent4, mu_forth.cpu().numpy()]) if self.test_mu_latent4.size else mu_forth.cpu().numpy()
+        self.test_mu_latent5 = np.vstack(
+            [self.test_mu_latent5, mu_fifth.cpu().numpy()]) if self.test_mu_latent5.size else mu_fifth.cpu().numpy()
+        return (self.test_mu_latent1.shape[0] + self.test_mu_latent2.shape[0] + self.test_mu_latent3.shape[0] + self.test_mu_latent4.shape[0] + self.test_mu_latent5.shape[0]) / 5.0

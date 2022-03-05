@@ -23,7 +23,7 @@ def main(hparams):
     ds = BoxHead(dataset=hparams.dataset)
     ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
 
-    vae = VAEThreeLevel(nc=3, decoder_dist='gaussian', latent_dims=hparams.latent_dims,
+    vae = VAEFiveLevel(nc=3, decoder_dist='gaussian', latent_dims=hparams.latent_dims,
                gamma=float(hparams.gamma), l1_regularization = float(hparams.l1), l2_regularization = float(hparams.l2),
                max_iter=int(hparams.max_steps), lr=float(hparams.lr),
                beta1=0.9, beta2=0.999)
@@ -47,13 +47,13 @@ def main(hparams):
 
     sample_ids = [15, 4, 400]
 
-    epoch_end_example_image_S = ImagePredictionLoggerThreeLevel(sample=sample_ids[0], ds=ds, wandb_logger=wandb_logger)
-    epoch_end_example_image_S2 = ImagePredictionLoggerThreeLevel(sample=sample_ids[1], ds=ds, wandb_logger=wandb_logger)
-    epoch_end_example_image_S3 = ImagePredictionLoggerThreeLevel(sample=sample_ids[2], ds=ds, wandb_logger=wandb_logger)
+    epoch_end_example_image_S = ImagePredictionLoggerFiveLevel(sample=sample_ids[0], ds=ds, wandb_logger=wandb_logger)
+    epoch_end_example_image_S2 = ImagePredictionLoggerFiveLevel(sample=sample_ids[1], ds=ds, wandb_logger=wandb_logger)
+    epoch_end_example_image_S3 = ImagePredictionLoggerFiveLevel(sample=sample_ids[2], ds=ds, wandb_logger=wandb_logger)
 
     #mu_val_logger = get_first_images_mu_logger(ds, wandb_logger)
 
-    test_logger = TestImagePredictionLoggerThreeLevel(sample=sample_ids[1], ds=ds, ds_t=ds_t, wandb_logger=wandb_logger)
+    test_logger = TestImagePredictionLoggerFiveLevel(sample=sample_ids[1], ds=ds, ds_t=ds_t, wandb_logger=wandb_logger)
 
     wandb_logger.watch(vae, log_freq=10000)  # log network topology and weights
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", default=0.0003)  # dataset
 
     parser.add_argument("--latent_dims", nargs="*", type=int,
-                        default=[500,500,500])
+                        default=[500,400,300, 200, 100])
     parser.add_argument("--name", default="")  # dataset
 
     args = parser.parse_args()
