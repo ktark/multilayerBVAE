@@ -330,3 +330,46 @@ def get_all_latent_correlation(generative_properties_list, ds_t, vae):
         stat_l3_all = np.vstack([stat_l3_all, stat_l3]) if stat_l3_all.size else np.array(stat_l3)
 
     return stat_l1_all, stat_l2_all, stat_l3_all
+
+def get_all_latent_correlation5(generative_properties_list, ds_t, vae):
+    stat_l1_all = np.array([])
+    stat_l2_all = np.array([])
+    stat_l3_all = np.array([])
+    stat_l4_all = np.array([])
+    stat_l5_all = np.array([])
+
+    for gen_prop in generative_properties_list:
+        stat_l1 = []
+        stat_l2 = []
+        stat_l3 = []
+        stat_l4 = []
+        stat_l5 = []
+
+        prop = ds_t.get_all_labels()[gen_prop]
+
+        for i in np.arange(0, vae.test_mu_latent1.shape[1], 1):
+            corr = np.abs(stats.spearmanr(prop, vae.test_mu_latent1[:, i]).correlation)
+            stat_l1.append(corr)
+        stat_l1_all = np.vstack([stat_l1_all, stat_l1]) if stat_l1_all.size else np.array(stat_l1)
+
+        for i in np.arange(0, vae.test_mu_latent2.shape[1], 1):
+            corr = np.abs(stats.spearmanr(prop, vae.test_mu_latent2[:, i]).correlation)
+            stat_l2.append(corr)
+        stat_l2_all = np.vstack([stat_l2_all, stat_l2]) if stat_l2_all.size else np.array(stat_l2)
+
+        for i in np.arange(0, vae.test_mu_latent3.shape[1], 1):
+            corr = np.abs(stats.spearmanr(prop, vae.test_mu_latent3[:, i]).correlation)
+            stat_l3.append(corr)
+        stat_l3_all = np.vstack([stat_l3_all, stat_l3]) if stat_l3_all.size else np.array(stat_l3)
+
+        for i in np.arange(0, vae.test_mu_latent4.shape[1], 1):
+            corr = np.abs(stats.spearmanr(prop, vae.test_mu_latent4[:, i]).correlation)
+            stat_l4.append(corr)
+        stat_l4_all = np.vstack([stat_l4_all, stat_l4]) if stat_l4_all.size else np.array(stat_l4)
+
+        for i in np.arange(0, vae.test_mu_latent5.shape[1], 1):
+            corr = np.abs(stats.spearmanr(prop, vae.test_mu_latent5[:, i]).correlation)
+            stat_l5.append(corr)
+        stat_l5_all = np.vstack([stat_l5_all, stat_l5]) if stat_l5_all.size else np.array(stat_l5)
+
+    return stat_l1_all, stat_l2_all, stat_l3_all, stat_l4_all, stat_l5_all

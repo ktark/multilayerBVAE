@@ -1743,7 +1743,7 @@ class TestImagePredictionLoggerFiveLevel(Callback):
 
 
     def on_test_epoch_end(self, trainer, pl_module):
-        l1, l2, l3, l4, l5 = get_all_latent_correlation(pl_module.gen_params, self.ds_t, pl_module)
+        l1, l2, l3, l4, l5 = get_all_latent_correlation5(pl_module.gen_params, self.ds_t, pl_module)
         self.wandb_logger.log_table(key="test/first_latents_corr", columns=pl_module.gen_params, data=l1.T)
         self.wandb_logger.log_table(key="test/second_latents_corr", columns=pl_module.gen_params, data=l2.T)
         self.wandb_logger.log_table(key="test/third_latents_corr", columns=pl_module.gen_params, data=l3.T)
