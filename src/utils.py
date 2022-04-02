@@ -373,3 +373,312 @@ def get_all_latent_correlation5(generative_properties_list, ds_t, vae):
         stat_l5_all = np.vstack([stat_l5_all, stat_l5]) if stat_l5_all.size else np.array(stat_l5)
 
     return stat_l1_all, stat_l2_all, stat_l3_all, stat_l4_all, stat_l5_all
+
+
+# from google disentanglement lib
+from sklearn import ensemble
+import scipy
+
+def _compute_dci(mus_train, ys_train, mus_test, ys_test):
+  """Computes score based on both training and testing codes and factors."""
+  scores = {}
+  importance_matrix, train_err, test_err = compute_importance_gbt(
+      mus_train, ys_train, mus_test, ys_test)
+  assert importance_matrix.shape[0] == mus_train.shape[0]
+  assert importance_matrix.shape[1] == ys_train.shape[0]
+  scores["informativeness_train"] = train_err
+  scores["informativeness_test"] = test_err
+  scores["disentanglement"] = disentanglement(importance_matrix)
+  scores["completeness"] = completeness(importance_matrix)
+  return scores
+
+
+def compute_importance_gbt(x_train, y_train, x_test, y_test):
+  """Compute importance based on gradient boosted trees."""
+  num_factors = y_train.shape[0]
+  num_codes = x_train.shape[0]
+  importance_matrix = np.zeros(shape=[num_codes, num_factors],
+                               dtype=np.float64)
+  train_loss = []
+  test_loss = []
+  for i in range(num_factors):
+    model = ensemble.GradientBoostingRegressor(verbose=0)
+    model.fit(x_train.T, y_train[i, :])
+    importance_matrix[:, i] = np.abs(model.feature_importances_)
+    train_loss.append(np.mean(model.predict(x_train.T) == y_train[i, :]))
+    test_loss.append(np.mean(model.predict(x_test.T) == y_test[i, :]))
+  return importance_matrix, np.mean(train_loss), np.mean(test_loss)
+
+
+def disentanglement_per_code(importance_matrix):
+  """Compute disentanglement score of each code."""
+  # importance_matrix is of shape [num_codes, num_factors].
+  return 1. - scipy.stats.entropy(importance_matrix.T + 1e-11,
+                                  base=importance_matrix.shape[1])
+
+
+def disentanglement(importance_matrix):
+  """Compute the disentanglement score of the representation."""
+  per_code = disentanglement_per_code(importance_matrix)
+  if importance_matrix.sum() == 0.:
+    importance_matrix = np.ones_like(importance_matrix)
+  code_importance = importance_matrix.sum(axis=1) / importance_matrix.sum()
+
+  return np.sum(per_code*code_importance)
+
+
+def completeness_per_factor(importance_matrix):
+  """Compute completeness of each factor."""
+  # importance_matrix is of shape [num_codes, num_factors].
+  return 1. - scipy.stats.entropy(importance_matrix + 1e-11,
+                                  base=importance_matrix.shape[0])
+
+
+def completeness(importance_matrix):
+  """"Compute completeness of the representation."""
+  per_factor = completeness_per_factor(importance_matrix)
+  if importance_matrix.sum() == 0.:
+    importance_matrix = np.ones_like(importance_matrix)
+  factor_importance = importance_matrix.sum(axis=0) / importance_matrix.sum()
+  return np.sum(per_factor*factor_importance)
+
+
+def get_all_latent_multinomial_regr5(generative_properties_list, ds_t, vae):
+    stat_l1_all = np.array([])
+    stat_l2_all = np.array([])
+    stat_l3_all = np.array([])
+    stat_l4_all = np.array([])
+    stat_l5_all = np.array([])
+
+    for gen_prop in generative_properties_list:
+        stat_l1 = []
+        stat_l2 = []
+        stat_l3 = []
+        stat_l4 = []
+        stat_l5 = []
+
+        prop = ds_t.get_all_labels()[gen_prop]
+
+        for i in np.arange(0, vae.test_mu_latent1.shape[1], 1):
+            y = prop
+            x = vae.test_mu_latent1[:, i][:, None]
+            #model pipeline
+
+            model = make_pipeline(PolynomialFeatures(4), LinearRegression())
+            pred = model.fit(x, y).predict(x)
+            metric = r2_score(y, pred)
+            #append statistics
+            stat_l1.append(metric)
+        stat_l1_all = np.vstack([stat_l1_all, stat_l1]) if stat_l1_all.size else np.array(stat_l1)
+
+        for i in np.arange(0, vae.test_mu_latent2.shape[1], 1):
+            y = prop
+            x = vae.test_mu_latent2[:, i][:, None]
+            #model pipeline
+            model = make_pipeline(PolynomialFeatures(4), LinearRegression())
+            pred = model.fit(x, y).predict(x)
+            metric = r2_score(y, pred)
+            stat_l2.append(metric)
+        stat_l2_all = np.vstack([stat_l2_all, stat_l2]) if stat_l2_all.size else np.array(stat_l2)
+
+        for i in np.arange(0, vae.test_mu_latent3.shape[1], 1):
+            y = prop
+            x = vae.test_mu_latent3[:, i][:, None]
+            #model pipeline
+            model = make_pipeline(PolynomialFeatures(4), LinearRegression())
+            pred = model.fit(x, y).predict(x)
+            metric = r2_score(y, pred)
+            stat_l3.append(metric)
+        stat_l3_all = np.vstack([stat_l3_all, stat_l3]) if stat_l3_all.size else np.array(stat_l3)
+
+        for i in np.arange(0, vae.test_mu_latent4.shape[1], 1):
+            y = prop
+            x = vae.test_mu_latent4[:, i][:, None]
+            #model pipeline
+            model = make_pipeline(PolynomialFeatures(4), LinearRegression())
+            pred = model.fit(x, y).predict(x)
+            metric = r2_score(y, pred)
+            stat_l4.append(metric)
+        stat_l4_all = np.vstack([stat_l4_all, stat_l4]) if stat_l4_all.size else np.array(stat_l4)
+
+        for i in np.arange(0, vae.test_mu_latent5.shape[1], 1):
+            y = prop
+            x = vae.test_mu_latent5[:, i][:, None]
+            #model pipeline
+            model = make_pipeline(PolynomialFeatures(4), LinearRegression())
+            pred = model.fit(x, y).predict(x)
+            metric = r2_score(y, pred)
+            stat_l5.append(metric)
+        stat_l5_all = np.vstack([stat_l5_all, stat_l5]) if stat_l5_all.size else np.array(stat_l5)
+
+    return stat_l1_all, stat_l2_all, stat_l3_all, stat_l4_all, stat_l5_all
+
+def get_all_latent_multinomial_regr1(generative_properties_list, ds_t, vae):
+    stat_l1_all = np.array([])
+
+    for gen_prop in generative_properties_list:
+        stat_l1 = []
+
+        prop = ds_t.get_all_labels()[gen_prop]
+
+        for i in np.arange(0, vae.test_mu_latent1.shape[1], 1):
+            y = prop
+            x = vae.test_mu_latent1[:, i][:, None]
+            #model pipeline
+
+            model = make_pipeline(PolynomialFeatures(4), LinearRegression())
+            pred = model.fit(x, y).predict(x)
+            metric = r2_score(y, pred)
+            #append statistics
+            stat_l1.append(metric)
+        stat_l1_all = np.vstack([stat_l1_all, stat_l1]) if stat_l1_all.size else np.array(stat_l1)
+
+    return stat_l1_all
+
+
+
+
+def create_kl_value_images(kl_list, mu_list, logvar_list, img_size=72, text_color="black",
+                           background_color="white", mode="ALL"):  # input size 64+2*4
+    images_list = []
+    font = ImageFont.load_default()
+    w, h = font.getsize(6)
+
+    for idx, val in enumerate(kl_list):
+        img = Image.new('RGB', (img_size, img_size), background_color)
+        str_number0 = str(idx)
+        str_number1 = "KL" + ":{:.5f}".format(val)
+        str_number2 = "mu" + ":{:.5f}".format(mu_list[0][idx].item())
+        str_number3 = "sd" + ":{:.5f}".format(logvar_list[0][idx].item())
+
+        draw = ImageDraw.Draw(img)
+        draw.text(((img_size - w) / 15, (img_size - h) * 0.05), str_number0, font=font, fill=text_color)
+        if mode == "ALL":
+            draw.text(((img_size - w) / 15, (img_size - h) * 0.25), str_number1, font=font, fill=text_color)
+            draw.text(((img_size - w) / 15, (img_size - h) * 0.5), str_number2, font=font, fill=text_color)
+            draw.text(((img_size - w) / 15, (img_size - h) * 0.75), str_number3, font=font, fill=text_color)
+
+        numpy_img = np.asarray(img) / 255
+        numpy_img = np.moveaxis(numpy_img, 2, 0)
+        numpy_img = np.expand_dims(numpy_img, axis=0)
+        images_list.append(numpy_img)
+
+    return images_list
+
+
+def create_text_image(text, img_size=72, text_color="black",
+                           background_color="white"):  # input size 64+2*4
+
+    font = ImageFont.load_default()
+    w, h = font.getsize(6)
+
+    img = Image.new('RGB', (img_size, img_size), background_color)
+    draw = ImageDraw.Draw(img)
+    draw.text(((img_size - w) / 15, (img_size - h) * 0.05), text, font=font, fill=text_color)
+
+
+    numpy_img = np.asarray(img) / 255
+    numpy_img = np.moveaxis(numpy_img, 2, 0)
+    numpy_img = np.expand_dims(numpy_img, axis=0)
+
+    return numpy_img
+
+def get_visualization_latent_border(trainer, pl_module):
+    data = next(iter(trainer.train_dataloader)).cuda()
+    _, mu_l0, _, _, mu_l1, _ = pl_module.forward(data)
+
+    return torch.min(mu_l0, dim=0).values, torch.max(mu_l0, dim=0).values, torch.min(mu_l1, dim=0).values, torch.max(mu_l1, dim=0).values
+
+
+
+from matplotlib.ticker import FormatStrFormatter
+
+def get_scatter_images(pl_module, mu, mu_hier):
+    images_list = []
+    #  l0_indices = pl_module.encoder.mu_indices[idx]
+    transforms2 = transforms.Compose([transforms.Resize((72, 72)), transforms.ToTensor()])
+    for lat1_idx, l0_indices in enumerate(pl_module.encoder.mu_indices):
+
+        for l0_idx in l0_indices:
+            corr_coefficient = torch.corrcoef(torch.stack((mu.T[l0_idx], mu_hier.T[lat1_idx]), axis=0))[0, 1].item()
+
+            fig = Figure()
+            canvas = FigureCanvas(fig)
+            fig.set_size_inches(2, 2)
+            ax = fig.gca()
+
+            ax.scatter(mu_hier.T[lat1_idx].cpu().detach().numpy(),mu.T[l0_idx].cpu().detach().numpy(),c='green',
+                       alpha=0.5)
+            ax.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+            ax.tick_params(axis='x', labelsize=15)
+            ax.tick_params(axis='y', labelsize=15)
+            ax.set_title(":{:.5f}".format(corr_coefficient), size=18, pad=-15)
+
+            # fig.tight_layout(pad=5)
+
+            # To remove the huge white borders
+
+            fig.canvas.draw()
+
+            image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            im = Image.fromarray(image_from_plot)
+            x = transforms2(im)
+            x_exp = np.expand_dims(x.numpy(), axis=0)
+            images_list.append(torch.from_numpy(x_exp))
+    return images_list
+
+
+def get_scatter_images_layer(pl_module, mu, mu_hier):
+    images_list = []
+    #  l0_indices = pl_module.encoder.mu_indices[idx]
+    transforms2 = transforms.Compose([transforms.Resize((72, 72)), transforms.ToTensor()])
+    for lat1_idx in torch.arange(0,20,1):
+
+        for l0_idx in torch.arange(0,4,1):
+            corr_coefficient = torch.corrcoef(torch.stack((mu.T[lat1_idx], mu_hier.T[lat1_idx*4+l0_idx]), axis=0))[0, 1].item()
+
+            fig = Figure()
+            canvas = FigureCanvas(fig)
+            fig.set_size_inches(2, 2)
+            ax = fig.gca()
+
+            ax.scatter(mu_hier.T[lat1_idx*4+l0_idx].cpu().detach().numpy(),mu.T[lat1_idx].cpu().detach().numpy(), c='green',
+                       alpha=0.5)
+            ax.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+            ax.tick_params(axis='x', labelsize=15)
+            ax.tick_params(axis='y', labelsize=15)
+            ax.set_title(":{:.5f}".format(corr_coefficient), size=18, pad=-15)
+
+            # fig.tight_layout(pad=5)
+
+            # To remove the huge white borders
+
+            fig.canvas.draw()
+
+            image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            im = Image.fromarray(image_from_plot)
+            x = transforms2(im)
+            x_exp = np.expand_dims(x.numpy(), axis=0)
+            images_list.append(torch.from_numpy(x_exp))
+    return images_list
+
+def get_first_images_mu(trainer, pl_module, ds, logger):
+    images_indices = np.arange(0, 50, 1)
+
+    l0_cols = ['l0_' + str(k) for k in np.arange(0, pl_module.latent_dim, 1)]
+
+    columns = ["image_id"]
+    columns.extend(l0_cols)
+    full_data = []
+
+    for idx in images_indices:
+        data_row = []
+        data = ds.__getitem__(idx).reshape((-1, 3, 64, 64)).float().cuda()
+        _, mu_l0, _ = pl_module.forward(data)
+        data_row.extend([idx])
+        data_row.extend(mu_l0.flatten().detach().cpu().numpy())  # , mu_l1])
+        full_data.append(data_row)
+    logger.log_table(key="validation_samples", columns=columns, data=full_data)
+

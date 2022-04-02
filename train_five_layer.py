@@ -20,8 +20,12 @@ def main(hparams):
     pl.seed_everything(int(hparams.seed), workers=True)
     print(hparams)
 
-    ds = BoxHead(dataset=hparams.dataset)
-    ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
+##    ds = BoxHead(dataset=hparams.dataset)
+##    ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
+    
+    ds = BoxHeadNoRotation(dataset=hparams.dataset)
+    ds_t = BoxHeadNoRotationWithLabels(dataset=hparams.dataset) #for testing only
+    
 
     vae = VAEFiveLevel(nc=3, decoder_dist='gaussian', latent_dims=hparams.latent_dims,
                gamma=float(hparams.gamma), l1_regularization = float(hparams.l1), l2_regularization = float(hparams.l2),

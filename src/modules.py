@@ -387,3 +387,42 @@ class FiveLevelEncoder(nn.Module):
         fifth_latent = self.fifth_latents(forth_latent)
 
         return first_latent, second_latent, third_latent, forth_latent, fifth_latent
+
+
+class OneLevelEncoder(nn.Module):
+    def __init__(self, nc, latent_dims):
+        super(OneLevelEncoder, self).__init__()
+        self.nc = nc
+        self.latent_dims = latent_dims
+        self.encoder = nn.Sequential(
+            nn.Conv2d(self.nc, 64, 4, 2, padding="valid"),  # 1          # B,  32, 32, 64
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(64),
+            nn.Conv2d(64, 128, 4, 2, padding="valid"),  # 1          # B,  16, 16, 128
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(128),
+            nn.Conv2d(128, 256, 2, 2, padding="valid"),  # B,   8,  8, 256
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(256),
+            nn.Conv2d(256, 512, 2, 2, padding="valid"),  # B,  4,  4,  512
+            nn.LeakyReLU(0.3),
+            #nn.Dropout(p=0.1),
+            nn.BatchNorm2d(512),
+            View((-1, 512 * 3 * 3)),  # B, 2048 #changed to nc
+            nn.Linear(4608, 1024)  # B, 1024
+        )
+        self.first_latents = nn.Sequential(
+            #nn.Dropout(p=0.3),
+            nn.BatchNorm1d(1024),
+            nn.Linear(1024, self.latent_dims[0] * 2),  # B, z_dim*2
+        )
+
+
+    def forward(self, x):
+        x = self.encoder(x)
+        first_latent = self.first_latents(x)
+
+        return first_latent

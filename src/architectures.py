@@ -1392,6 +1392,7 @@ class VAEThreeLevel(pl.LightningModule):
         return (self.test_mu_latent1.shape[0] + self.test_mu_latent2.shape[0] + self.test_mu_latent3.shape[0]) / 3.0
 
 
+
 class VAEFiveLevel(pl.LightningModule):
     def __init__(self, latent_dims=[100, 100, 100, 100, 100], nc=1,
                  decoder_dist='bernoulli', gamma=1.0,
@@ -1421,8 +1422,25 @@ class VAEFiveLevel(pl.LightningModule):
         self.test_mu_latent4 = np.array([])
         self.test_mu_latent5 = np.array([])
 
+
+        self.test_logvar_latent1 = np.array([])
+        self.test_logvar_latent2 = np.array([])
+        self.test_logvar_latent3 = np.array([])
+        self.test_logvar_latent4 = np.array([])
+        self.test_logvar_latent5 = np.array([])
+
+
+        self.kl_latent1 = np.array([])
+        self.kl_latent2 = np.array([])
+        self.kl_latent3 = np.array([])
+        self.kl_latent4 = np.array([])
+        self.kl_latent5 = np.array([])
+
+
+
+        self.recon_loss = np.array([])
         self.gen_params = ['azimuths', 'floor_colors', 'wall_colors', 'eye1_colors', 'eye2_colors', 'eye3_colors',
-                           'eye4_colors', 'box_colors', 'box_sizes']
+                           'eye4_colors', 'box_colors', 'box_sizes','overall_eye_color']
 
         self.automatic_optimization = False
         # nr of channels in image
@@ -1609,11 +1627,11 @@ class VAEFiveLevel(pl.LightningModule):
         x = batch.float()
         x = x.detach()
 
-        _, mu_first, _, \
-        _, mu_second, _, \
-        _, mu_third, _, \
-        _, mu_forth, _,\
-        _, mu_fifth, _ = self(x)
+        x_recon_first, mu_first, logvar_first, \
+        x_recon_second, mu_second, logvar_second, \
+        x_recon_third, mu_third, logvar_third, \
+        x_recon_forth, mu_forth, logvar_forth, \
+        x_recon_fifth, mu_fifth, logvar_fifth = self(x)
 
         self.test_mu_latent1 = np.vstack(
             [self.test_mu_latent1, mu_first.cpu().numpy()]) if self.test_mu_latent1.size else mu_first.cpu().numpy()
@@ -1625,4 +1643,185 @@ class VAEFiveLevel(pl.LightningModule):
             [self.test_mu_latent4, mu_forth.cpu().numpy()]) if self.test_mu_latent4.size else mu_forth.cpu().numpy()
         self.test_mu_latent5 = np.vstack(
             [self.test_mu_latent5, mu_fifth.cpu().numpy()]) if self.test_mu_latent5.size else mu_fifth.cpu().numpy()
+
+        self.test_logvar_latent1 = np.vstack(
+            [self.test_logvar_latent1, logvar_first.cpu().numpy()]) if self.test_logvar_latent1.size else logvar_first.cpu().numpy()
+        self.test_logvar_latent2 = np.vstack(
+            [self.test_logvar_latent2, logvar_second.cpu().numpy()]) if self.test_logvar_latent2.size else logvar_second.cpu().numpy()
+        self.test_logvar_latent3 = np.vstack(
+            [self.test_logvar_latent3, logvar_third.cpu().numpy()]) if self.test_logvar_latent3.size else logvar_third.cpu().numpy()
+        self.test_logvar_latent4 = np.vstack(
+            [self.test_logvar_latent4, logvar_forth.cpu().numpy()]) if self.test_logvar_latent4.size else logvar_forth.cpu().numpy()
+        self.test_logvar_latent5 = np.vstack(
+            [self.test_logvar_latent5, logvar_fifth.cpu().numpy()]) if self.test_logvar_latent5.size else logvar_fifth.cpu().numpy()
+
+
+
+
+        recon_loss_first = reconstruction_loss(x, x_recon_first, self.decoder_dist)
+        recon_loss_second = reconstruction_loss(x, x_recon_second, self.decoder_dist)
+        recon_loss_third = reconstruction_loss(x, x_recon_third, self.decoder_dist)
+        recon_loss_forth = reconstruction_loss(x, x_recon_forth, self.decoder_dist)
+        recon_loss_fifth = reconstruction_loss(x, x_recon_fifth, self.decoder_dist)
+
+
+        _, dim_wise_kld_first, _ = kl_divergence(mu_first, logvar_first)
+        _, dim_wise_kld_second, _ = kl_divergence(mu_second, logvar_second)
+        _, dim_wise_kld_third, _ = kl_divergence(mu_third, logvar_third)
+        _, dim_wise_kld_forth, _ = kl_divergence(mu_forth, logvar_forth)
+        _, dim_wise_kld_fifth, _ = kl_divergence(mu_fifth, logvar_fifth)
+
+        self.kl_latent1 = np.vstack(
+            [self.kl_latent1, dim_wise_kld_first.cpu().numpy()]) if self.kl_latent1.size else dim_wise_kld_first.cpu().numpy()
+        self.kl_latent2 = np.vstack(
+            [self.kl_latent2, dim_wise_kld_second.cpu().numpy()]) if self.kl_latent2.size else dim_wise_kld_second.cpu().numpy()
+        self.kl_latent3 = np.vstack(
+            [self.kl_latent3, dim_wise_kld_third.cpu().numpy()]) if self.kl_latent3.size else dim_wise_kld_third.cpu().numpy()
+        self.kl_latent4 = np.vstack(
+            [self.kl_latent4, dim_wise_kld_forth.cpu().numpy()]) if self.kl_latent4.size else dim_wise_kld_forth.cpu().numpy()
+        self.kl_latent5 = np.vstack(
+            [self.kl_latent5, dim_wise_kld_fifth.cpu().numpy()]) if self.kl_latent5.size else dim_wise_kld_fifth.cpu().numpy()
+
+
+
+
+        recon_loss = np.hstack([recon_loss_first.cpu().numpy(), recon_loss_second.cpu().numpy(), recon_loss_third.cpu().numpy(), recon_loss_forth.cpu().numpy(), recon_loss_fifth.cpu().numpy()])
+        self.recon_loss = np.vstack(
+            [self.recon_loss, recon_loss]) if self.recon_loss.size else recon_loss
+
+
         return (self.test_mu_latent1.shape[0] + self.test_mu_latent2.shape[0] + self.test_mu_latent3.shape[0] + self.test_mu_latent4.shape[0] + self.test_mu_latent5.shape[0]) / 5.0
+        
+class VAEOneLevel(pl.LightningModule):
+    def __init__(self, latent_dims=[300], nc=1,
+                 decoder_dist='bernoulli', gamma=1.0,
+                 max_iter=1.5e6, lr=5e-4, beta1=0.9, beta2=0.999, l1_regularization=0.1, l2_regularization=10,
+                 loss_function='bvae'):
+        super().__init__()
+
+        self.decoder_dist = decoder_dist
+
+        self.global_iter = 0
+        self.gamma = gamma
+        self.max_iter = max_iter
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+
+        self.loss_function = loss_function
+        self.latent_dims = latent_dims
+
+        self.dim_wise_kld = []
+        self.hierarchical_kl = []
+        self.test_mu_latent1 = np.array([])
+        
+        self.test_logvar_latent1 = np.array([])
+        
+        self.kl_latent1 = np.array([])
+        
+        self.recon_loss = np.array([])
+        self.gen_params = ['azimuths', 'floor_colors', 'wall_colors', 'eye1_colors', 'eye2_colors', 'eye3_colors',
+                           'eye4_colors', 'box_colors', 'box_sizes','overall_eye_color']
+
+        self.automatic_optimization = False
+        # nr of channels in image
+        self.nc = nc
+
+        # encoder
+        self.encoder = OneLevelEncoder(nc=self.nc, latent_dims=self.latent_dims)
+
+        self.decoder_first_latent = SmallDecoder(nc=self.nc, latent_dim=self.latent_dims[0]).decoder
+
+        # log hyperparameters
+        self.save_hyperparameters()
+
+        # Initialize weights
+        # self.weight_init()
+        self.init_weights()
+
+    def weight_init(self):
+        for block in self._modules:
+            print(type(self._modules[block]), self._modules[block])
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def init_weights(m):
+        kaiming_init(m)
+
+    def forward(self, x):
+        first_latent = self.encoder(x)
+
+        mu_first = first_latent[:, :self.latent_dims[0]]
+        logvar_first = first_latent[:, self.latent_dims[0]:]
+
+        z_first = reparametrize(mu_first, logvar_first)
+        x_recon_first = self.decoder_first_latent(z_first).view(x.size())
+
+        return x_recon_first, mu_first, logvar_first
+
+    def configure_optimizers(self):
+        # return torch.optim.Adam(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        return torch.optim.Adamax(self.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+
+    def training_step(self, batch, batch_idx):
+        x = batch.float()
+        x = x.detach()
+        self.global_iter = self.trainer.global_step + 1
+
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        x_recon_first, mu_first, logvar_first = self(x)
+
+        recon_loss_first = reconstruction_loss(x, x_recon_first, self.decoder_dist)
+        total_kld_first, dim_wise_kld_first, mean_kld_first = kl_divergence(mu_first, logvar_first)
+
+        # if self.loss_function == 'bvae':
+        
+        beta_vae_loss = recon_loss_first + self.gamma * (total_kld_first)
+
+        beta_vae_loss.backward()
+
+        logs = {
+            'train/beta_vae_loss': beta_vae_loss,
+            'train/kl_first': mean_kld_first,
+            'train/recon_first': recon_loss_first,
+            'train/iter': self.global_iter
+        }
+        for idx, val in enumerate(dim_wise_kld_first):
+            logs['train_kl/kl_first_' + str(idx)] = val
+        self.log_dict(
+            logs,
+            on_step=True, on_epoch=False, prog_bar=False, logger=True
+        )
+
+        opt.step()
+        return beta_vae_loss
+
+    def test_step(self, batch, batch_idx):
+        x = batch.float()
+        x = x.detach()
+
+        x_recon_first, mu_first, logvar_first = self(x)
+
+        self.test_mu_latent1 = np.vstack(
+            [self.test_mu_latent1, mu_first.cpu().numpy()]) if self.test_mu_latent1.size else mu_first.cpu().numpy()
+        
+        self.test_logvar_latent1 = np.vstack(
+            [self.test_logvar_latent1, logvar_first.cpu().numpy()]) if self.test_logvar_latent1.size else logvar_first.cpu().numpy()
+        
+        recon_loss_first = reconstruction_loss(x, x_recon_first, self.decoder_dist)
+        
+
+        _, dim_wise_kld_first, _ = kl_divergence(mu_first, logvar_first)
+        
+        self.kl_latent1 = np.vstack(
+            [self.kl_latent1, dim_wise_kld_first.cpu().numpy()]) if self.kl_latent1.size else dim_wise_kld_first.cpu().numpy()
+
+        recon_loss = np.hstack([recon_loss_first.cpu().numpy()])
+        self.recon_loss = np.vstack(
+            [self.recon_loss, recon_loss]) if self.recon_loss.size else recon_loss
+
+
+        return (self.test_mu_latent1.shape[0]) / 1.0
+

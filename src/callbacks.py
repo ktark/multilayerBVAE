@@ -1744,11 +1744,85 @@ class TestImagePredictionLoggerFiveLevel(Callback):
 
     def on_test_epoch_end(self, trainer, pl_module):
         l1, l2, l3, l4, l5 = get_all_latent_correlation5(pl_module.gen_params, self.ds_t, pl_module)
-        self.wandb_logger.log_table(key="test/first_latents_corr", columns=pl_module.gen_params, data=l1.T)
-        self.wandb_logger.log_table(key="test/second_latents_corr", columns=pl_module.gen_params, data=l2.T)
-        self.wandb_logger.log_table(key="test/third_latents_corr", columns=pl_module.gen_params, data=l3.T)
-        self.wandb_logger.log_table(key="test/forth_latents_corr", columns=pl_module.gen_params, data=l4.T)
-        self.wandb_logger.log_table(key="test/fifth_latents_corr", columns=pl_module.gen_params, data=l5.T)
+        r1, r2, r3, r4, r5 = get_all_latent_multinomial_regr5(pl_module.gen_params, self.ds_t, pl_module)
+        self.wandb_logger.log_table(key="test/first_latents_reg", columns=pl_module.gen_params, data=r1.T)
+        self.wandb_logger.log_table(key="test/second_latents_reg", columns=pl_module.gen_params, data=r2.T)
+        self.wandb_logger.log_table(key="test/third_latents_reg", columns=pl_module.gen_params, data=r3.T)
+        self.wandb_logger.log_table(key="test/forth_latents_reg", columns=pl_module.gen_params, data=r4.T)
+        self.wandb_logger.log_table(key="test/fifth_latents_reg", columns=pl_module.gen_params, data=r5.T)
+
+        
+        self.wandb_logger.log_table(key="testf/first_kl", data=np.sum(pl_module.kl_latent1, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
+        self.wandb_logger.log_table(key="testf/second_kl", data=np.sum(pl_module.kl_latent2, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
+        self.wandb_logger.log_table(key="testf/third_kl", data=np.sum(pl_module.kl_latent3, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
+        self.wandb_logger.log_table(key="testf/forth_kl", data=np.sum(pl_module.kl_latent4, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
+        self.wandb_logger.log_table(key="testf/fifth_kl", data=np.sum(pl_module.kl_latent5, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
+        
+        self.wandb_logger.log_table(key="testf/recon_loss", data=np.sum(pl_module.recon_loss, axis=0).reshape(-1,1), columns=['mean_recon_by_layer'])
+        
+        all_labels = self.ds_t.get_all_labels()
+        dat = []
+        for key in all_labels.keys():
+          dat.append(all_labels[key])
+
+        np_dat=(list(map(list, zip(*dat))))
+          
+        
+        high_level_disent, child_level_disent, child_and_parent_level_disent, total_disent, \
+        high_level_compl,  child_level_compl, child_and_parent_level_compl, total_compl, l1_importance_matrix, train_loss, test_loss = get_DCI(pl_module.test_mu_latent1, np_dat)
+
+        logs = {'test/l1_high_level_disent':high_level_disent, 'test/l1_child_level_disent':child_level_disent, 'test/l1_child_and_parent_level_disent':child_and_parent_level_disent, 'test/l1_total_disent':total_disent,
+                'test/l1_high_level_compl':high_level_compl,  'test/l1_child_level_compl':child_level_compl, 'test/l1_child_and_parent_level_compl':child_and_parent_level_compl, 'test/l1_total_compl':total_compl, 'test/l1_dci_train_loss': train_loss, 'test/l1_dci_test_loss': test_loss}
+        pl_module.log_dict(
+            logs, logger=True
+        )
+        self.wandb_logger.log_table(key="test/first_latents_imp_matrix", columns=pl_module.gen_params, data=l1_importance_matrix)
+
+
+        high_level_disent, child_level_disent, child_and_parent_level_disent, total_disent, \
+        high_level_compl,  child_level_compl, child_and_parent_level_compl, total_compl, l2_importance_matrix, train_loss, test_loss = get_DCI(pl_module.test_mu_latent2, np_dat)
+
+        logs = {'test/l2_high_level_disent':high_level_disent, 'test/l2_child_level_disent':child_level_disent, 'test/l2_child_and_parent_level_disent':child_and_parent_level_disent, 'test/l2_total_disent':total_disent,
+                'test/l2_high_level_compl':high_level_compl,  'test/l2_child_level_compl':child_level_compl, 'test/l2_child_and_parent_level_compl':child_and_parent_level_compl, 'test/l2_total_compl':total_compl,'test/l2_dci_train_loss': train_loss, 'test/l2_dci_test_loss': test_loss}
+        pl_module.log_dict(
+            logs, logger=True
+        )
+        self.wandb_logger.log_table(key="test/second_latents_imp_matrix", columns=pl_module.gen_params, data=l2_importance_matrix)
+
+        high_level_disent, child_level_disent, child_and_parent_level_disent, total_disent, \
+        high_level_compl,  child_level_compl, child_and_parent_level_compl, total_compl, l3_importance_matrix, train_loss, test_loss = get_DCI(pl_module.test_mu_latent3, np_dat)
+
+        logs = {'test/l3_high_level_disent':high_level_disent, 'test/l3_child_level_disent':child_level_disent, 'test/l3_child_and_parent_level_disent':child_and_parent_level_disent, 'test/l3_total_disent':total_disent,
+                'test/l3_high_level_compl':high_level_compl,  'test/l3_child_level_compl':child_level_compl, 'test/l3_child_and_parent_level_compl':child_and_parent_level_compl, 'test/l3_total_compl':total_compl,'test/l3_dci_train_loss': train_loss, 'test/l3_dci_test_loss': test_loss}
+        pl_module.log_dict(
+            logs, logger=True
+        )
+        self.wandb_logger.log_table(key="test/third_latents_imp_matrix", columns=pl_module.gen_params, data=l3_importance_matrix)
+
+        high_level_disent, child_level_disent, child_and_parent_level_disent, total_disent, \
+        high_level_compl,  child_level_compl, child_and_parent_level_compl, total_compl, l4_importance_matrix, train_loss, test_loss = get_DCI(pl_module.test_mu_latent4, np_dat)
+
+        logs = {'test/l4_high_level_disent':high_level_disent, 'test/l4_child_level_disent':child_level_disent, 'test/l4_child_and_parent_level_disent':child_and_parent_level_disent, 'test/l4_total_disent':total_disent,
+                'test/l4_high_level_compl':high_level_compl,  'test/l4_child_level_compl':child_level_compl, 'test/l4_child_and_parent_level_compl':child_and_parent_level_compl, 'test/l4_total_compl':total_compl,'test/l4_dci_train_loss': train_loss, 'l4_dci_test_loss': test_loss}
+        pl_module.log_dict(
+            logs, logger=True
+        )
+        self.wandb_logger.log_table(key="test/fourth_latents_imp_matrix", columns=pl_module.gen_params, data=l4_importance_matrix)
+
+        high_level_disent, child_level_disent, child_and_parent_level_disent, total_disent, \
+        high_level_compl,  child_level_compl, child_and_parent_level_compl, total_compl, l5_importance_matrix, train_loss, test_loss = get_DCI(pl_module.test_mu_latent5, np_dat)
+
+        logs = {'test/l5_high_level_disent':high_level_disent, 'test/l5_child_level_disent':child_level_disent, 'test/l5_child_and_parent_level_disent':child_and_parent_level_disent, 'test/l5_total_disent':total_disent,
+                'test/l5_high_level_compl':high_level_compl,  'test/l5_child_level_compl':child_level_compl, 'test/l5_child_and_parent_level_compl':child_and_parent_level_compl, 'test/l5_total_compl':total_compl, 'test/l5_dci_train_loss': train_loss, 'test/l5_dci_test_loss': test_loss}
+        pl_module.log_dict(
+            logs, logger=True
+        )
+        self.wandb_logger.log_table(key="test/fifth_latents_imp_matrix", columns=pl_module.gen_params, data=l5_importance_matrix)
+
+
+
+
+
 
         val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
 
@@ -1823,6 +1897,10 @@ class TestImagePredictionLoggerFiveLevel(Callback):
         first_latent_kl_images = create_kl_value_images(dim_wise_kld_first, mu_first, sd_first,
                                                         72, background_color="black", text_color="white")
         first_latent_corr_images = create_corr_images(l1)
+        first_latent_reg_images = create_corr_images(r1, "gray")
+        first_latent_feat_images = create_corr_images(l1_importance_matrix.T, "azure")
+        
+        
         # print('L1 shape: ', l1.shape)
         # print('first_latent_corr_images: ', str(len(first_latent_corr_images)))
 
@@ -1841,16 +1919,22 @@ class TestImagePredictionLoggerFiveLevel(Callback):
             print_images.append(torch.from_numpy(first_latent_kl_images[i]))
 
             print_images.append(torch.from_numpy(first_latent_corr_images[i]))
+            print_images.append(torch.from_numpy(first_latent_reg_images[i]))
+            print_images.append(torch.from_numpy(first_latent_feat_images[i]))
 
         all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=14, pad_value=1)
-        self.wandb_logger.log_image('test_images/first_latent_image_z_' + str(self.sample),
+        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+        self.wandb_logger.log_image('test_imagesf/first_latent_image_z_' + str(self.sample),
                                     [(images_grid.permute(1, 2, 0).numpy())])
 
         # log z changes second latents
         second_latent_kl_images = create_kl_value_images(dim_wise_kld_second, mu_second, sd_second,
                                                         72, background_color="black", text_color="white")
         second_latent_corr_images = create_corr_images(l2)
+        second_latent_reg_images = create_corr_images(r2, "gray")
+        second_latent_feat_images = create_corr_images(l2_importance_matrix.T, "azure")
+
+        
 
         print_images = []
         z_size = mu_second.size(1)
@@ -1866,15 +1950,21 @@ class TestImagePredictionLoggerFiveLevel(Callback):
                 print_images.append(sigm_pred)
             print_images.append(torch.from_numpy(second_latent_kl_images[i]))
             print_images.append(torch.from_numpy(second_latent_corr_images[i]))
+            print_images.append(torch.from_numpy(second_latent_reg_images[i]))
+            print_images.append(torch.from_numpy(second_latent_feat_images[i]))
+            
 
         all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=14, pad_value=1)
-        self.wandb_logger.log_image('test_images/second_latent_image_z_' + str(self.sample),
+        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+        self.wandb_logger.log_image('test_imagesf/second_latent_image_z_' + str(self.sample),
                                     [(images_grid.permute(1, 2, 0).numpy())])
         # log z changes third latents
         third_latent_kl_images = create_kl_value_images(dim_wise_kld_third, mu_third, sd_third,
                                                           72, background_color="black", text_color="white")
         third_latent_corr_images = create_corr_images(l3)
+        third_latent_reg_images = create_corr_images(r3, "gray")
+        third_latent_feat_images = create_corr_images(l3_importance_matrix.T, "azure")
+        
         print_images = []
         z_size = mu_third.size(1)
         for i in np.arange(0, z_size, 1):
@@ -1889,15 +1979,21 @@ class TestImagePredictionLoggerFiveLevel(Callback):
                 print_images.append(sigm_pred)
             print_images.append(torch.from_numpy(third_latent_kl_images[i]))
             print_images.append(torch.from_numpy(third_latent_corr_images[i]))
+            print_images.append(torch.from_numpy(third_latent_reg_images[i]))
+            print_images.append(torch.from_numpy(third_latent_feat_images[i]))
+            
         all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=14, pad_value=1)
-        self.wandb_logger.log_image('test_images/third_latent_image_z_' + str(self.sample),
+        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+        self.wandb_logger.log_image('test_imagesf/third_latent_image_z_' + str(self.sample),
                                     [(images_grid.permute(1, 2, 0).numpy())])
 
         # log z changes forth latents
         forth_latent_kl_images = create_kl_value_images(dim_wise_kld_forth, mu_forth, sd_forth,
                                                           72, background_color="black", text_color="white")
         forth_latent_corr_images = create_corr_images(l4)
+        forth_latent_reg_images = create_corr_images(r4, "gray")
+        forth_latent_feat_images = create_corr_images(l4_importance_matrix.T, "azure")
+        
         print_images = []
         z_size = mu_forth.size(1)
         for i in np.arange(0, z_size, 1):
@@ -1912,15 +2008,21 @@ class TestImagePredictionLoggerFiveLevel(Callback):
                 print_images.append(sigm_pred)
             print_images.append(torch.from_numpy(forth_latent_kl_images[i]))
             print_images.append(torch.from_numpy(forth_latent_corr_images[i]))
+            print_images.append(torch.from_numpy(forth_latent_reg_images[i]))
+            print_images.append(torch.from_numpy(forth_latent_feat_images[i]))
+
         all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=14, pad_value=1)
-        self.wandb_logger.log_image('test_images/forth_latent_image_z_' + str(self.sample),
+        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+        self.wandb_logger.log_image('test_imagesf/forth_latent_image_z_' + str(self.sample),
                                     [(images_grid.permute(1, 2, 0).numpy())])
 
         # log z changes fifth latents
         fifth_latent_kl_images = create_kl_value_images(dim_wise_kld_fifth, mu_fifth, sd_fifth,
                                                           72, background_color="black", text_color="white")
         fifth_latent_corr_images = create_corr_images(l5)
+        fifth_latent_reg_images = create_corr_images(r5, "gray")
+        fifth_latent_feat_images = create_corr_images(l5_importance_matrix.T, "azure")
+        
         print_images = []
         z_size = mu_fifth.size(1)
         for i in np.arange(0, z_size, 1):
@@ -1935,10 +2037,137 @@ class TestImagePredictionLoggerFiveLevel(Callback):
                 print_images.append(sigm_pred)
             print_images.append(torch.from_numpy(fifth_latent_kl_images[i]))
             print_images.append(torch.from_numpy(fifth_latent_corr_images[i]))
+            print_images.append(torch.from_numpy(fifth_latent_reg_images[i]))
+            print_images.append(torch.from_numpy(fifth_latent_feat_images[i]))
+            
         all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=14, pad_value=1)
-        self.wandb_logger.log_image('test_images/fifth_latent_image_z_' + str(self.sample),
+        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+        self.wandb_logger.log_image('test_imagesf/fifth_latent_image_z_' + str(self.sample),
                                     [(images_grid.permute(1, 2, 0).numpy())])
 
 
         pl_module.train()
+
+
+
+
+class TestImagePredictionLoggerOneLevel(Callback):
+    def __init__(self, sample=0, ds=None, ds_t=None, wandb_logger=None):
+        super().__init__()
+        self.sample = sample
+        self.ds = ds
+        self.wandb_logger = wandb_logger
+        self.ds_t = ds_t
+
+
+    def on_test_epoch_end(self, trainer, pl_module):
+        l1 = get_all_latent_correlation1(pl_module.gen_params, self.ds_t, pl_module)
+        r1 = get_all_latent_multinomial_regr1(pl_module.gen_params, self.ds_t, pl_module)
+        self.wandb_logger.log_table(key="test/first_latents_reg", columns=pl_module.gen_params, data=r1.T)
+        
+        self.wandb_logger.log_table(key="testf/first_kl", data=np.sum(pl_module.kl_latent1, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
+        
+        self.wandb_logger.log_table(key="testf/recon_loss", data=np.sum(pl_module.recon_loss, axis=0).reshape(-1,1), columns=['mean_recon_by_layer'])
+        
+        all_labels = self.ds_t.get_all_labels()
+        dat = []
+        for key in all_labels.keys():
+          dat.append(all_labels[key])
+
+        np_dat=(list(map(list, zip(*dat))))
+          
+        
+        high_level_disent, child_level_disent, child_and_parent_level_disent, total_disent, \
+        high_level_compl,  child_level_compl, child_and_parent_level_compl, total_compl, l1_importance_matrix, train_loss, test_loss = get_DCI(pl_module.test_mu_latent1, np_dat)
+
+        logs = {'test/l1_high_level_disent':high_level_disent, 'test/l1_child_level_disent':child_level_disent, 'test/l1_child_and_parent_level_disent':child_and_parent_level_disent, 'test/l1_total_disent':total_disent,
+                'test/l1_high_level_compl':high_level_compl,  'test/l1_child_level_compl':child_level_compl, 'test/l1_child_and_parent_level_compl':child_and_parent_level_compl, 'test/l1_total_compl':total_compl, 'test/l1_dci_train_loss': train_loss, 'test/l1_dci_test_loss': test_loss}
+        pl_module.log_dict(
+            logs, logger=True
+        )
+        self.wandb_logger.log_table(key="test/first_latents_imp_matrix", columns=pl_module.gen_params, data=l1_importance_matrix)
+
+
+        val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
+
+        pl_module.eval()
+
+        first_latent = pl_module.encoder(val_imgs)
+
+        mu_first = first_latent[:, :pl_module.latent_dims[0]]
+        logvar_first = first_latent[:, pl_module.latent_dims[0]:]
+        sd_first = logvar_first.div(2).exp()
+        _, dim_wise_kld_first, _ = kl_divergence(mu_first, logvar_first)
+
+
+        with torch.no_grad():
+            pred_first = pl_module.decoder_first_latent(mu_first.to(pl_module.device)).cpu()
+
+        first_recon = torch.sigmoid(pred_first).data
+        first_recon = (first_recon - torch.min(first_recon)).div(torch.max(first_recon) - torch.min(first_recon))
+        first_recon_pad = nn.functional.pad(first_recon, pad=[4, 4, 4, 4], value=0.1)
+
+        orig_pad = nn.functional.pad(val_imgs.cpu(), pad=[4, 4, 4, 4], value=0.5)
+
+        recon_img = [orig_pad, first_recon_pad]
+
+        print_orig_recon = torch.cat(recon_img, dim=0).cpu()
+        recon_image = make_grid(print_orig_recon, normalize=False, scale_each=True, nrow=1, pad_value=1)
+        recon_image = recon_image.permute(1, 2, 0)
+        # Log the images as wandb Image
+        self.wandb_logger.log_image('test_images/test_image_recon_' + str(self.sample), [(recon_image.numpy())])
+
+        # log z changes first latents
+        first_latent_kl_images = create_kl_value_images(dim_wise_kld_first, mu_first, sd_first,
+                                                        72, background_color="black", text_color="white")
+        first_latent_corr_images = create_corr_images(l1)
+        first_latent_reg_images = create_corr_images(r1, "gray")
+        first_latent_feat_images = create_corr_images(l1_importance_matrix.T, "azure")
+        
+        
+        # print('L1 shape: ', l1.shape)
+        # print('first_latent_corr_images: ', str(len(first_latent_corr_images)))
+
+        print_images = []
+        z_size = mu_first.size(1)
+        for i in np.arange(0, z_size, 1):
+            for z_change in (np.arange(-3, 3, 0.5)):
+                z_copy = mu_first.clone().detach()
+                z_copy[0, i] = z_change
+                with torch.no_grad():
+                    pred = pl_module.decoder_first_latent(z_copy.to(pl_module.device)).cpu()
+                sigm_pred = torch.sigmoid(pred).data
+                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
+                print_images.append(sigm_pred)
+            print_images.append(torch.from_numpy(first_latent_kl_images[i]))
+
+            print_images.append(torch.from_numpy(first_latent_corr_images[i]))
+            print_images.append(torch.from_numpy(first_latent_reg_images[i]))
+            print_images.append(torch.from_numpy(first_latent_feat_images[i]))
+
+        all_images = torch.cat(print_images, dim=0).cpu()
+        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+        self.wandb_logger.log_image('test_imagesf/first_latent_image_z_' + str(self.sample),
+                                    [(images_grid.permute(1, 2, 0).numpy())])
+
+        pl_module.train()
+
+
+
+class get_first_images_mu_logger(Callback):
+    def __init__(self, ds=None, logger=None):
+        super().__init__()
+        self.ds = ds
+        self.logger = logger
+        self.epoch_count = 0
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        # Bring the tensors to CPU
+        self.epoch_count += 1
+        # print('test epoch count', self.epoch_count, 'div 10', self.epoch_count%10==0)
+
+        if self.epoch_count % 50 == 1:
+            pl_module.eval()
+            get_first_images_mu(trainer, pl_module, self.ds, self.logger)
+            pl_module.train()
