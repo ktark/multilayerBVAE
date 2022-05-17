@@ -10,4 +10,4 @@
 module load python/3.8.6
 source ../thesis_env_cuda11/bin/activate
 export WANDB_API_KEY=536da542ee9b110c15555f219ff08d8d3fbc9ffb
-python train_single_initial_BVAE.py --gpus 1 --max_steps 1500000 --gamma 100 --C_min 0 --C_max 20 --C_stop_iter 100000 --latent_dim 10 --dataset dsprites --seed 2
+python train_single_initial_BVAE.py --gpus 1 --max_steps 1500 --gamma 100 --C_min 0 --C_max 20 --C_stop_iter 100000 --latent_dim 10 --dataset dsprites --seed 2

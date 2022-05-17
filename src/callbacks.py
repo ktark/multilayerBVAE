@@ -7,8 +7,13 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from torchvision import transforms
 import time
-
-
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
+from matplotlib.ticker import FormatStrFormatter
 
 class ImagePredictionLogger2(Callback):
     def __init__(self, sample=0, ds=None, wandb_logger=None):
@@ -29,13 +34,6 @@ class ImagePredictionLogger2(Callback):
             pl_module.eval()
             k = pl_module.encoder(val_imgs)
             mu = k[:, :pl_module.latent_dim]
-
-            # Log test image means
-            # metrics ={}
-            # for idx, i in enumerate(np.arange(0, k.shape[1]/2, 1)):
-            #   metrics['mu_image_'+str(self.sample)+'_'+str(idx)] = k[0:1,int(idx):int(idx)+1].detach().cpu().numpy()[0][0]
-            #   metrics['logvar_image_'+str(self.sample)+'_'+str(idx)] = k[0:1,idx+int(k.shape[1]/2):idx+int(k.shape[1]/2)+1].detach().cpu().numpy()[0][0]
-            # wandb_logger.log_metrics(metrics)
 
             z = mu  # Take only first half of k (mu values) removed k[:, :10]
             with torch.no_grad():
@@ -447,13 +445,6 @@ class ImagePredictionLoggerHierarchyForward(Callback):
             mu_level0 = cat_hier[:, :pl_module.latent_dim_level1]
             logvar_level0 = cat_hier[:, pl_module.latent_dim_level1:]
 
-
-            # distributions, hier_dist_concat = pl_module.encoder(val_imgs)
-            # mu_level1 = hier_dist_concat[:, :pl_module.latent_dim_level1]
-            # logvar_level1 = hier_dist_concat[:, pl_module.latent_dim_level1:]
-            # mu_level0 = distributions[:, :pl_module.latent_dim_level0]
-            # logvar_level0 = distributions[:, pl_module.latent_dim_level0:]
-
             _, dim_wise_kld, _ = kl_divergence(mu_level0, logvar_level0)
 
             _, hierarchical_kl, _ = kl_divergence(mu_level1, logvar_level1)
@@ -760,14 +751,9 @@ class ImagePredictionLoggerLatentActivationLayers(Callback):
                                   hier12[:, 4:], hier13[:, 4:], hier14[:, 4:], hier15[:, 4:], hier16[:, 4:],
                                   hier17[:, 4:],
                                   hier18[:, 4:], hier19[:, 4:]), axis=1)
-            # print('cat_hier', cat_hier.shape, hier1.shape, hier2.shape)
             mu_level1 = cat_hier[:, :pl_module.latent_dim_level1]
             logvar_level1 = cat_hier[:, pl_module.latent_dim_level1:]
 
-
-
-            # mu_level1 = hier_dist_concat[:, :pl_module.latent_dim_level1]
-            # logvar_level1 = hier_dist_concat[:, pl_module.latent_dim_level1:]
             mu_level0 = distributions[:, :pl_module.latent_dim_level0]
             logvar_level0 = distributions[:, pl_module.latent_dim_level0:]
 
@@ -942,6 +928,7 @@ class ImagePredictionLoggerLatentActivationSingleDecoder(Callback):
             self.wandb_logger.log_image('train_images/latent_info_' + str(self.sample),
                                         [(merged_image_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
+
 class ImagePredictionLoggerMergedLatentActivation(Callback):
     def __init__(self, wandb_logger=None):
         super().__init__()
@@ -1013,7 +1000,6 @@ class ImagePredictionLoggerMergedLatentActivation(Callback):
 
 
 
-# TO DO: currently for 2 decoders
 class ImagePredictionLoggerMergedLatentActivationSingleDecoder(Callback):
     def __init__(self, wandb_logger=None):
         super().__init__()
@@ -1024,7 +1010,6 @@ class ImagePredictionLoggerMergedLatentActivationSingleDecoder(Callback):
         self.epoch_count += 1
 
         if self.epoch_count % 5 == 1:
-            # Bring the tensors to CPU
             pl_module.eval()
             pl_module.cuda()
             zero_image = torch.zeros((1, 1, 64, 64)).float().cuda()
@@ -1032,7 +1017,6 @@ class ImagePredictionLoggerMergedLatentActivationSingleDecoder(Callback):
             level1 = pl_module.latent_dim_level1
             print_images = []
 
-            # 0 latent features
             level0_zero_img = torch.zeros((1, level0)).cuda()
             level1_zero_img = torch.zeros((1, level1)).cuda()
 
@@ -1040,12 +1024,9 @@ class ImagePredictionLoggerMergedLatentActivationSingleDecoder(Callback):
                 pred0_level0 = pl_module.decoder(level0_zero_img)
                 pred0_level1 = pl_module.decoder_level1(level1_zero_img)
 
-            # "no info" predictions
             zero_pred_level0 = torch.sigmoid(pred0_level0).data
             zero_pred_level1 = torch.sigmoid(pred0_level1).data
-            # return zero_pred_level0, zero_pred_level1
 
-            # which latent feature vales to check
             check_levels = [-1, 1]
             # hierarhy indices
             hier_indices = pl_module.encoder.mu_indices
@@ -1133,11 +1114,8 @@ def get_visualization_latent_border(trainer, pl_module):
 
 
 
-from matplotlib.ticker import FormatStrFormatter
-
 def get_scatter_images(pl_module, mu, mu_hier):
     images_list = []
-    #  l0_indices = pl_module.encoder.mu_indices[idx]
     transforms2 = transforms.Compose([transforms.Resize((72, 72)), transforms.ToTensor()])
     for lat1_idx, l0_indices in enumerate(pl_module.encoder.mu_indices):
 
@@ -1155,10 +1133,6 @@ def get_scatter_images(pl_module, mu, mu_hier):
             ax.tick_params(axis='x', labelsize=15)
             ax.tick_params(axis='y', labelsize=15)
             ax.set_title(":{:.5f}".format(corr_coefficient), size=18, pad=-15)
-
-            # fig.tight_layout(pad=5)
-
-            # To remove the huge white borders
 
             fig.canvas.draw()
 
@@ -1191,10 +1165,6 @@ def get_scatter_images_layer(pl_module, mu, mu_hier):
             ax.tick_params(axis='x', labelsize=15)
             ax.tick_params(axis='y', labelsize=15)
             ax.set_title(":{:.5f}".format(corr_coefficient), size=18, pad=-15)
-
-            # fig.tight_layout(pad=5)
-
-            # To remove the huge white borders
 
             fig.canvas.draw()
 
@@ -1233,139 +1203,11 @@ class get_first_images_mu_logger(Callback):
         self.epoch_count = 0
 
     def on_train_epoch_end(self, trainer, pl_module):
-        # Bring the tensors to CPU
         self.epoch_count += 1
-        # print('test epoch count', self.epoch_count, 'div 10', self.epoch_count%10==0)
 
         if self.epoch_count % 50 == 1:
             pl_module.eval()
             get_first_images_mu(trainer, pl_module, self.ds, self.logger)
-            pl_module.train()
-
-class ImagePredictionLoggerThreeLevel(Callback):
-    def __init__(self, sample=0, ds=None, wandb_logger=None):
-        super().__init__()
-        self.sample = sample
-        self.ds = ds
-        self.epoch_count = 0
-        self.wandb_logger = wandb_logger
-
-    def on_train_epoch_end(self, trainer, pl_module):
-        self.epoch_count += 1
-
-        if self.epoch_count % 5 == 1:
-            val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
-
-            pl_module.eval()
-
-            first_latent, second_latent, third_latent = pl_module.encoder(val_imgs)
-
-            mu_first = first_latent[:, :pl_module.latent_dims[0]]
-            logvar_first = first_latent[:, pl_module.latent_dims[0]:]
-            sd_first = logvar_first.div(2).exp()
-            _, dim_wise_kld_first, _ = kl_divergence(mu_first, logvar_first)
-
-            mu_second = second_latent[:, :pl_module.latent_dims[1]]
-            logvar_second = second_latent[:, pl_module.latent_dims[1]:]
-            sd_second = logvar_second.div(2).exp()
-            _, dim_wise_kld_second, _ = kl_divergence(mu_second, logvar_second)
-
-            mu_third = third_latent[:, :pl_module.latent_dims[2]]
-            logvar_third = third_latent[:, pl_module.latent_dims[2]:]
-            sd_third = logvar_third.div(2).exp()
-            _, dim_wise_kld_third, _ = kl_divergence(mu_third, logvar_third)
-
-            with torch.no_grad():
-                pred_first = pl_module.decoder_first_latent(mu_first.to(pl_module.device)).cpu()
-                pred_second = pl_module.decoder_second_latent(mu_second.to(pl_module.device)).cpu()
-                pred_third = pl_module.decoder_third_latent(mu_third.to(pl_module.device)).cpu()
-
-            first_recon = torch.sigmoid(pred_first).data
-            first_recon = (first_recon - torch.min(first_recon)).div(torch.max(first_recon) - torch.min(first_recon))
-            first_recon_pad = nn.functional.pad(first_recon, pad=[4, 4, 4, 4], value=0.1)
-
-            second_recon = torch.sigmoid(pred_second).data
-            second_recon = (second_recon - torch.min(second_recon)).div(torch.max(second_recon) - torch.min(second_recon))
-            second_recon_pad = nn.functional.pad(second_recon, pad=[4, 4, 4, 4], value=0.2)
-
-            third_recon = torch.sigmoid(pred_third).data
-            third_recon = (third_recon - torch.min(third_recon)).div(torch.max(third_recon) - torch.min(third_recon))
-            third_recon_pad = nn.functional.pad(third_recon, pad=[4, 4, 4, 4], value=0.3)
-
-            orig_pad = nn.functional.pad(val_imgs.cpu(), pad=[4, 4, 4, 4], value=0.5)
-
-            recon_img = [orig_pad, first_recon_pad, second_recon_pad, third_recon_pad]
-
-            print_orig_recon = torch.cat(recon_img, dim=0).cpu()
-            recon_image = make_grid(print_orig_recon, normalize=False, scale_each=True, nrow=1, pad_value=1)
-            recon_image = recon_image.permute(1, 2, 0)
-            # Log the images as wandb Image
-            self.wandb_logger.log_image('train_images/test_image_recon_' + str(self.sample), [(recon_image.numpy())])
-
-            # log z changes first latents
-            first_latent_kl_images = create_kl_value_images(dim_wise_kld_first, mu_first, sd_first,
-                                                            72, background_color="black", text_color="white")
-
-            print_images = []
-            z_size = mu_first.size(1)
-            for i in np.arange(0, z_size, 1):
-                for z_change in (np.arange(-3, 3, 0.5)):
-                    z_copy = mu_first.clone().detach()
-                    z_copy[0, i] = z_change
-                    with torch.no_grad():
-                        pred = pl_module.decoder_first_latent(z_copy.to(pl_module.device)).cpu()
-                    sigm_pred = torch.sigmoid(pred).data
-                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                    sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                    print_images.append(sigm_pred)
-                print_images.append(torch.from_numpy(first_latent_kl_images[i]))
-
-            all_images = torch.cat(print_images, dim=0).cpu()
-            images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=13, pad_value=1)
-            self.wandb_logger.log_image('train_images/first_latent_image_z_' + str(self.sample),
-                                        [(images_grid.permute(1, 2, 0).numpy())])
-
-            # log z changes second latents
-            second_latent_kl_images = create_kl_value_images(dim_wise_kld_second, mu_second, sd_second,
-                                                            72, background_color="black", text_color="white")
-
-            print_images = []
-            z_size = mu_second.size(1)
-            for i in np.arange(0, z_size, 1):
-                for z_change in (np.arange(-3, 3, 0.5)):
-                    z_copy = mu_second.clone().detach()
-                    z_copy[0, i] = z_change
-                    with torch.no_grad():
-                        pred = pl_module.decoder_second_latent(z_copy.to(pl_module.device)).cpu()
-                    sigm_pred = torch.sigmoid(pred).data
-                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                    sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                    print_images.append(sigm_pred)
-                print_images.append(torch.from_numpy(second_latent_kl_images[i]))
-            all_images = torch.cat(print_images, dim=0).cpu()
-            images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=13, pad_value=1)
-            self.wandb_logger.log_image('train_images/second_latent_image_z_' + str(self.sample),
-                                        [(images_grid.permute(1, 2, 0).numpy())])
-            # log z changes third latents
-            third_latent_kl_images = create_kl_value_images(dim_wise_kld_third, mu_third, sd_third,
-                                                             72, background_color="black", text_color="white")
-            print_images = []
-            z_size = mu_third.size(1)
-            for i in np.arange(0, z_size, 1):
-                for z_change in (np.arange(-3, 3, 0.5)):
-                    z_copy = mu_third.clone().detach()
-                    z_copy[0, i] = z_change
-                    with torch.no_grad():
-                        pred = pl_module.decoder_third_latent(z_copy.to(pl_module.device)).cpu()
-                    sigm_pred = torch.sigmoid(pred).data
-                    sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                    sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                    print_images.append(sigm_pred)
-                print_images.append(torch.from_numpy(third_latent_kl_images[i]))
-            all_images = torch.cat(print_images, dim=0).cpu()
-            images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=13, pad_value=1)
-            self.wandb_logger.log_image('train_images/third_latent_image_z_' + str(self.sample),
-                                        [(images_grid.permute(1, 2, 0).numpy())])
             pl_module.train()
 
 
@@ -1563,7 +1405,8 @@ class ImagePredictionLoggerFiveLevel(Callback):
 
 
 
-def create_corr_images(input_latent_corr):
+
+def create_corr_images(input_latent_corr, bg="white"):
   #gen_params = ['azimuths', 'floor_colors','wall_colors','eye1_colors','eye2_colors','eye3_colors','eye4_colors','box_colors','box_sizes']
   latents_corr = 74-input_latent_corr*74
   images_list = []
@@ -1571,17 +1414,18 @@ def create_corr_images(input_latent_corr):
   #print('latents_corr_shape_1', latents_corr.shape[1])
   for i in (np.arange(0, latents_corr.shape[1], 1)):
     current_latent_reg = latents_corr[:,i]
-    img = Image.new('RGB', (72, 72), 'white')
+    img = Image.new('RGB', (72, 72), bg)
     draw = ImageDraw.Draw(img)
-    draw.line((4, current_latent_reg[0], 4, 74), fill=(51, 102, 204), width=8)
-    draw.line((12, current_latent_reg[1], 12, 74), fill=(153, 204, 255), width=8)
-    draw.line((20, current_latent_reg[2], 20, 74), fill=(153, 153, 51), width=8)
-    draw.line((28, current_latent_reg[3], 28, 74), fill=(102, 102, 153), width=8)
-    draw.line((36, current_latent_reg[4], 36, 74), fill=(204, 153, 51), width=8)
-    draw.line((44, current_latent_reg[5], 44, 74), fill=(0, 102, 102), width=8)
-    draw.line((52, current_latent_reg[6], 52, 74), fill=(51, 153, 255), width=8)
-    draw.line((60, current_latent_reg[7], 60, 74), fill=(153, 51, 0), width=8)
-    draw.line((68, current_latent_reg[8], 68, 74), fill=(204, 204, 153), width=8)
+    draw.line((4, current_latent_reg[0], 4, 74), fill=(51, 102, 204), width=6)
+    draw.line((11, current_latent_reg[1], 11, 74), fill=(153, 204, 255), width=6)
+    draw.line((18, current_latent_reg[2], 18, 74), fill=(153, 153, 51), width=6)
+    draw.line((25, current_latent_reg[7], 25, 74), fill=(102, 102, 153), width=6)
+    draw.line((32, current_latent_reg[8], 32, 74), fill=(204, 153, 51), width=6)
+    draw.line((39, current_latent_reg[3], 39, 74), fill=(0, 102, 102), width=6)
+    draw.line((46, current_latent_reg[4], 46, 74), fill=(51, 153, 255), width=6)
+    draw.line((53, current_latent_reg[5], 53, 74), fill=(153, 51, 0), width=6)
+    draw.line((60, current_latent_reg[6], 60, 74), fill=(204, 204, 153), width=6)
+    draw.line((67, current_latent_reg[9], 67, 74), fill=(0, 0, 255), width=6)
 
     numpy_img = np.asarray(img) / 255
     numpy_img = np.moveaxis(numpy_img, 2, 0)
@@ -1591,152 +1435,12 @@ def create_corr_images(input_latent_corr):
   return images_list
 
 
-class TestImagePredictionLoggerThreeLevel(Callback):
-    def __init__(self, sample=0, ds=None, ds_t=None, wandb_logger=None):
-        super().__init__()
-        self.sample = sample
-        self.ds = ds
-        self.wandb_logger = wandb_logger
-        self.ds_t = ds_t
-
-
-    def on_test_epoch_end(self, trainer, pl_module):
-        l1, l2, l3 = get_all_latent_correlation(pl_module.gen_params, self.ds_t, pl_module)
-        self.wandb_logger.log_table(key="test/first_latents_corr", columns=pl_module.gen_params, data=l1.T)
-        self.wandb_logger.log_table(key="test/second_latents_corr", columns=pl_module.gen_params, data=l2.T)
-        self.wandb_logger.log_table(key="test/third_latents_corr", columns=pl_module.gen_params, data=l3.T)
-
-        val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
-
-        pl_module.eval()
-
-        first_latent, second_latent, third_latent = pl_module.encoder(val_imgs)
-
-        mu_first = first_latent[:, :pl_module.latent_dims[0]]
-        logvar_first = first_latent[:, pl_module.latent_dims[0]:]
-        sd_first = logvar_first.div(2).exp()
-        _, dim_wise_kld_first, _ = kl_divergence(mu_first, logvar_first)
-
-        mu_second = second_latent[:, :pl_module.latent_dims[1]]
-        logvar_second = second_latent[:, pl_module.latent_dims[1]:]
-        sd_second = logvar_second.div(2).exp()
-        _, dim_wise_kld_second, _ = kl_divergence(mu_second, logvar_second)
-
-        mu_third = third_latent[:, :pl_module.latent_dims[2]]
-        logvar_third = third_latent[:, pl_module.latent_dims[2]:]
-        sd_third = logvar_third.div(2).exp()
-        _, dim_wise_kld_third, _ = kl_divergence(mu_third, logvar_third)
-
-        with torch.no_grad():
-            pred_first = pl_module.decoder_first_latent(mu_first.to(pl_module.device)).cpu()
-            pred_second = pl_module.decoder_second_latent(mu_second.to(pl_module.device)).cpu()
-            pred_third = pl_module.decoder_third_latent(mu_third.to(pl_module.device)).cpu()
-
-        first_recon = torch.sigmoid(pred_first).data
-        first_recon = (first_recon - torch.min(first_recon)).div(torch.max(first_recon) - torch.min(first_recon))
-        first_recon_pad = nn.functional.pad(first_recon, pad=[4, 4, 4, 4], value=0.1)
-
-        second_recon = torch.sigmoid(pred_second).data
-        second_recon = (second_recon - torch.min(second_recon)).div(torch.max(second_recon) - torch.min(second_recon))
-        second_recon_pad = nn.functional.pad(second_recon, pad=[4, 4, 4, 4], value=0.2)
-
-        third_recon = torch.sigmoid(pred_third).data
-        third_recon = (third_recon - torch.min(third_recon)).div(torch.max(third_recon) - torch.min(third_recon))
-        third_recon_pad = nn.functional.pad(third_recon, pad=[4, 4, 4, 4], value=0.3)
-
-        orig_pad = nn.functional.pad(val_imgs.cpu(), pad=[4, 4, 4, 4], value=0.5)
-
-        recon_img = [orig_pad, first_recon_pad, second_recon_pad, third_recon_pad]
-
-        print_orig_recon = torch.cat(recon_img, dim=0).cpu()
-        recon_image = make_grid(print_orig_recon, normalize=False, scale_each=True, nrow=1, pad_value=1)
-        recon_image = recon_image.permute(1, 2, 0)
-        # Log the images as wandb Image
-        self.wandb_logger.log_image('test_images/test_image_recon_' + str(self.sample), [(recon_image.numpy())])
-
-        # log z changes first latents
-        first_latent_kl_images = create_kl_value_images(dim_wise_kld_first, mu_first, sd_first,
-                                                        72, background_color="black", text_color="white")
-        first_latent_corr_images = create_corr_images(l1)
-        # print('L1 shape: ', l1.shape)
-        # print('first_latent_corr_images: ', str(len(first_latent_corr_images)))
-
-        print_images = []
-        z_size = mu_first.size(1)
-        for i in np.arange(0, z_size, 1):
-            for z_change in (np.arange(-3, 3, 0.5)):
-                z_copy = mu_first.clone().detach()
-                z_copy[0, i] = z_change
-                with torch.no_grad():
-                    pred = pl_module.decoder_first_latent(z_copy.to(pl_module.device)).cpu()
-                sigm_pred = torch.sigmoid(pred).data
-                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                print_images.append(sigm_pred)
-            print_images.append(torch.from_numpy(first_latent_kl_images[i]))
-
-            print_images.append(torch.from_numpy(first_latent_corr_images[i]))
-
-        all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=14, pad_value=1)
-        self.wandb_logger.log_image('test_images/first_latent_image_z_' + str(self.sample),
-                                    [(images_grid.permute(1, 2, 0).numpy())])
-
-        # log z changes second latents
-        second_latent_kl_images = create_kl_value_images(dim_wise_kld_second, mu_second, sd_second,
-                                                        72, background_color="black", text_color="white")
-        second_latent_corr_images = create_corr_images(l2)
-
-        print_images = []
-        z_size = mu_second.size(1)
-        for i in np.arange(0, z_size, 1):
-            for z_change in (np.arange(-3, 3, 0.5)):
-                z_copy = mu_second.clone().detach()
-                z_copy[0, i] = z_change
-                with torch.no_grad():
-                    pred = pl_module.decoder_second_latent(z_copy.to(pl_module.device)).cpu()
-                sigm_pred = torch.sigmoid(pred).data
-                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                print_images.append(sigm_pred)
-            print_images.append(torch.from_numpy(second_latent_kl_images[i]))
-            print_images.append(torch.from_numpy(second_latent_corr_images[i]))
-
-        all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=14, pad_value=1)
-        self.wandb_logger.log_image('test_images/second_latent_image_z_' + str(self.sample),
-                                    [(images_grid.permute(1, 2, 0).numpy())])
-        # log z changes third latents
-        third_latent_kl_images = create_kl_value_images(dim_wise_kld_third, mu_third, sd_third,
-                                                          72, background_color="black", text_color="white")
-        third_latent_corr_images = create_corr_images(l3)
-        print_images = []
-        z_size = mu_third.size(1)
-        for i in np.arange(0, z_size, 1):
-            for z_change in (np.arange(-3, 3, 0.5)):
-                z_copy = mu_third.clone().detach()
-                z_copy[0, i] = z_change
-                with torch.no_grad():
-                    pred = pl_module.decoder_third_latent(z_copy.to(pl_module.device)).cpu()
-                sigm_pred = torch.sigmoid(pred).data
-                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                print_images.append(sigm_pred)
-            print_images.append(torch.from_numpy(third_latent_kl_images[i]))
-            print_images.append(torch.from_numpy(third_latent_corr_images[i]))
-        all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=14, pad_value=1)
-        self.wandb_logger.log_image('test_images/third_latent_image_z_' + str(self.sample),
-                                    [(images_grid.permute(1, 2, 0).numpy())])
-        pl_module.train()
-
-
 
 
 class TestImagePredictionLoggerFiveLevel(Callback):
-    def __init__(self, sample=0, ds=None, ds_t=None, wandb_logger=None):
+    def __init__(self, samples_list=[0], ds=None, ds_t=None, wandb_logger=None):
         super().__init__()
-        self.sample = sample
+        self.samples_list = samples_list
         self.ds = ds
         self.wandb_logger = wandb_logger
         self.ds_t = ds_t
@@ -1751,15 +1455,31 @@ class TestImagePredictionLoggerFiveLevel(Callback):
         self.wandb_logger.log_table(key="test/forth_latents_reg", columns=pl_module.gen_params, data=r4.T)
         self.wandb_logger.log_table(key="test/fifth_latents_reg", columns=pl_module.gen_params, data=r5.T)
 
-        
-        self.wandb_logger.log_table(key="testf/first_kl", data=np.sum(pl_module.kl_latent1, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
-        self.wandb_logger.log_table(key="testf/second_kl", data=np.sum(pl_module.kl_latent2, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
-        self.wandb_logger.log_table(key="testf/third_kl", data=np.sum(pl_module.kl_latent3, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
-        self.wandb_logger.log_table(key="testf/forth_kl", data=np.sum(pl_module.kl_latent4, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
-        self.wandb_logger.log_table(key="testf/fifth_kl", data=np.sum(pl_module.kl_latent5, axis=0).reshape(-1,1), columns=['mean_kl_by_latent'])
+        kl1 = np.sum(pl_module.kl_latent1, axis=0).reshape(-1,1).flatten()
+        kl2 = np.sum(pl_module.kl_latent2, axis=0).reshape(-1,1).flatten()
+        kl3 = np.sum(pl_module.kl_latent3, axis=0).reshape(-1,1).flatten()
+        kl4 = np.sum(pl_module.kl_latent4, axis=0).reshape(-1,1).flatten()
+        kl5 = np.sum(pl_module.kl_latent5, axis=0).reshape(-1,1).flatten()
+
         
         self.wandb_logger.log_table(key="testf/recon_loss", data=np.sum(pl_module.recon_loss, axis=0).reshape(-1,1), columns=['mean_recon_by_layer'])
         
+
+        mu1 = [np.sum(pl_module.test_mu_latent1, axis=0).reshape(-1,1)]
+        mu2 = [np.sum(pl_module.test_mu_latent2, axis=0).reshape(-1,1)]
+        mu3 = [np.sum(pl_module.test_mu_latent3, axis=0).reshape(-1,1)]
+        mu4 = [np.sum(pl_module.test_mu_latent4, axis=0).reshape(-1,1)]
+        mu5 = [np.sum(pl_module.test_mu_latent5, axis=0).reshape(-1,1)]
+        
+        logvar1 = np.array([np.sum(pl_module.test_logvar_latent1, axis=0).reshape(-1,1)])
+        logvar2 = np.array([np.sum(pl_module.test_logvar_latent1, axis=0).reshape(-1,1)])
+        logvar3 = np.array([np.sum(pl_module.test_logvar_latent1, axis=0).reshape(-1,1)])
+        logvar4 = np.array([np.sum(pl_module.test_logvar_latent1, axis=0).reshape(-1,1)])
+        logvar5 = np.array([np.sum(pl_module.test_logvar_latent1, axis=0).reshape(-1,1)])
+
+
+
+      
         all_labels = self.ds_t.get_all_labels()
         dat = []
         for key in all_labels.keys():
@@ -1820,230 +1540,236 @@ class TestImagePredictionLoggerFiveLevel(Callback):
         self.wandb_logger.log_table(key="test/fifth_latents_imp_matrix", columns=pl_module.gen_params, data=l5_importance_matrix)
 
 
-
-
-
-
-        val_imgs = self.ds.__getitem__(self.sample).reshape((1, -1, 64, 64)).float().cuda()
-
         pl_module.eval()
 
-        first_latent, second_latent, third_latent, forth_latent, fifth_latent = pl_module.encoder(val_imgs)
-
-        mu_first = first_latent[:, :pl_module.latent_dims[0]]
-        logvar_first = first_latent[:, pl_module.latent_dims[0]:]
-        sd_first = logvar_first.div(2).exp()
-        _, dim_wise_kld_first, _ = kl_divergence(mu_first, logvar_first)
-
-        mu_second = second_latent[:, :pl_module.latent_dims[1]]
-        logvar_second = second_latent[:, pl_module.latent_dims[1]:]
-        sd_second = logvar_second.div(2).exp()
-        _, dim_wise_kld_second, _ = kl_divergence(mu_second, logvar_second)
-
-        mu_third = third_latent[:, :pl_module.latent_dims[2]]
-        logvar_third = third_latent[:, pl_module.latent_dims[2]:]
-        sd_third = logvar_third.div(2).exp()
-        _, dim_wise_kld_third, _ = kl_divergence(mu_third, logvar_third)
-
-        mu_forth = forth_latent[:, :pl_module.latent_dims[3]]
-        logvar_forth = forth_latent[:, pl_module.latent_dims[3]:]
-        sd_forth = logvar_forth.div(2).exp()
-        _, dim_wise_kld_forth, _ = kl_divergence(mu_forth, logvar_forth)
-
-        mu_fifth = fifth_latent[:, :pl_module.latent_dims[4]]
-        logvar_fifth = fifth_latent[:, pl_module.latent_dims[4]:]
-        sd_fifth = logvar_fifth.div(2).exp()
-        _, dim_wise_kld_fifth, _ = kl_divergence(mu_fifth, logvar_fifth)
+        for j, sample in enumerate(self.samples_list):
+          val_imgs = self.ds.__getitem__(sample).reshape((1, -1, 64, 64)).float().cuda()
 
 
-        with torch.no_grad():
-            pred_first = pl_module.decoder_first_latent(mu_first.to(pl_module.device)).cpu()
-            pred_second = pl_module.decoder_second_latent(mu_second.to(pl_module.device)).cpu()
-            pred_third = pl_module.decoder_third_latent(mu_third.to(pl_module.device)).cpu()
-            pred_forth = pl_module.decoder_forth_latent(mu_forth.to(pl_module.device)).cpu()
-            pred_fifth = pl_module.decoder_fifth_latent(mu_fifth.to(pl_module.device)).cpu()
+          first_latent, second_latent, third_latent, forth_latent, fifth_latent = pl_module.encoder(val_imgs)
 
-        first_recon = torch.sigmoid(pred_first).data
-        first_recon = (first_recon - torch.min(first_recon)).div(torch.max(first_recon) - torch.min(first_recon))
-        first_recon_pad = nn.functional.pad(first_recon, pad=[4, 4, 4, 4], value=0.1)
+          mu_first = first_latent[:, :pl_module.latent_dims[0]]
+          logvar_first = first_latent[:, pl_module.latent_dims[0]:]
+          sd_first = logvar_first.div(2).exp()
+          _, dim_wise_kld_first, _ = kl_divergence(mu_first, logvar_first)
 
-        second_recon = torch.sigmoid(pred_second).data
-        second_recon = (second_recon - torch.min(second_recon)).div(torch.max(second_recon) - torch.min(second_recon))
-        second_recon_pad = nn.functional.pad(second_recon, pad=[4, 4, 4, 4], value=0.2)
+          mu_second = second_latent[:, :pl_module.latent_dims[1]]
+          logvar_second = second_latent[:, pl_module.latent_dims[1]:]
+          sd_second = logvar_second.div(2).exp()
+          _, dim_wise_kld_second, _ = kl_divergence(mu_second, logvar_second)
 
-        third_recon = torch.sigmoid(pred_third).data
-        third_recon = (third_recon - torch.min(third_recon)).div(torch.max(third_recon) - torch.min(third_recon))
-        third_recon_pad = nn.functional.pad(third_recon, pad=[4, 4, 4, 4], value=0.3)
+          mu_third = third_latent[:, :pl_module.latent_dims[2]]
+          logvar_third = third_latent[:, pl_module.latent_dims[2]:]
+          sd_third = logvar_third.div(2).exp()
+          _, dim_wise_kld_third, _ = kl_divergence(mu_third, logvar_third)
 
-        forth_recon = torch.sigmoid(pred_forth).data
-        forth_recon = (forth_recon - torch.min(forth_recon)).div(torch.max(forth_recon) - torch.min(forth_recon))
-        forth_recon_pad = nn.functional.pad(forth_recon, pad=[4, 4, 4, 4], value=0.3)
+          mu_forth = forth_latent[:, :pl_module.latent_dims[3]]
+          logvar_forth = forth_latent[:, pl_module.latent_dims[3]:]
+          sd_forth = logvar_forth.div(2).exp()
+          _, dim_wise_kld_forth, _ = kl_divergence(mu_forth, logvar_forth)
 
-        fifth_recon = torch.sigmoid(pred_fifth).data
-        fifth_recon = (fifth_recon - torch.min(fifth_recon)).div(torch.max(fifth_recon) - torch.min(fifth_recon))
-        fifth_recon_pad = nn.functional.pad(fifth_recon, pad=[4, 4, 4, 4], value=0.3)
+          mu_fifth = fifth_latent[:, :pl_module.latent_dims[4]]
+          logvar_fifth = fifth_latent[:, pl_module.latent_dims[4]:]
+          sd_fifth = logvar_fifth.div(2).exp()
+          _, dim_wise_kld_fifth, _ = kl_divergence(mu_fifth, logvar_fifth)
 
-        orig_pad = nn.functional.pad(val_imgs.cpu(), pad=[4, 4, 4, 4], value=0.5)
 
-        recon_img = [orig_pad, first_recon_pad, second_recon_pad, third_recon_pad, forth_recon_pad, fifth_recon_pad]
+          with torch.no_grad():
+              pred_first = pl_module.decoder_first_latent(mu_first.to(pl_module.device)).cpu()
+              pred_second = pl_module.decoder_second_latent(mu_second.to(pl_module.device)).cpu()
+              pred_third = pl_module.decoder_third_latent(mu_third.to(pl_module.device)).cpu()
+              pred_forth = pl_module.decoder_forth_latent(mu_forth.to(pl_module.device)).cpu()
+              pred_fifth = pl_module.decoder_fifth_latent(mu_fifth.to(pl_module.device)).cpu()
 
-        print_orig_recon = torch.cat(recon_img, dim=0).cpu()
-        recon_image = make_grid(print_orig_recon, normalize=False, scale_each=True, nrow=1, pad_value=1)
-        recon_image = recon_image.permute(1, 2, 0)
-        # Log the images as wandb Image
-        self.wandb_logger.log_image('test_images/test_image_recon_' + str(self.sample), [(recon_image.numpy())])
+          first_recon = torch.sigmoid(pred_first).data
+          first_recon = (first_recon - torch.min(first_recon)).div(torch.max(first_recon) - torch.min(first_recon))
+          first_recon_pad = nn.functional.pad(first_recon, pad=[4, 4, 4, 4], value=0.1)
 
-        # log z changes first latents
-        first_latent_kl_images = create_kl_value_images(dim_wise_kld_first, mu_first, sd_first,
-                                                        72, background_color="black", text_color="white")
-        first_latent_corr_images = create_corr_images(l1)
-        first_latent_reg_images = create_corr_images(r1, "gray")
-        first_latent_feat_images = create_corr_images(l1_importance_matrix.T, "azure")
-        
-        
-        # print('L1 shape: ', l1.shape)
-        # print('first_latent_corr_images: ', str(len(first_latent_corr_images)))
+          second_recon = torch.sigmoid(pred_second).data
+          second_recon = (second_recon - torch.min(second_recon)).div(torch.max(second_recon) - torch.min(second_recon))
+          second_recon_pad = nn.functional.pad(second_recon, pad=[4, 4, 4, 4], value=0.2)
 
-        print_images = []
-        z_size = mu_first.size(1)
-        for i in np.arange(0, z_size, 1):
-            for z_change in (np.arange(-3, 3, 0.5)):
-                z_copy = mu_first.clone().detach()
-                z_copy[0, i] = z_change
-                with torch.no_grad():
-                    pred = pl_module.decoder_first_latent(z_copy.to(pl_module.device)).cpu()
-                sigm_pred = torch.sigmoid(pred).data
-                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                print_images.append(sigm_pred)
-            print_images.append(torch.from_numpy(first_latent_kl_images[i]))
+          third_recon = torch.sigmoid(pred_third).data
+          third_recon = (third_recon - torch.min(third_recon)).div(torch.max(third_recon) - torch.min(third_recon))
+          third_recon_pad = nn.functional.pad(third_recon, pad=[4, 4, 4, 4], value=0.3)
 
-            print_images.append(torch.from_numpy(first_latent_corr_images[i]))
-            print_images.append(torch.from_numpy(first_latent_reg_images[i]))
-            print_images.append(torch.from_numpy(first_latent_feat_images[i]))
+          forth_recon = torch.sigmoid(pred_forth).data
+          forth_recon = (forth_recon - torch.min(forth_recon)).div(torch.max(forth_recon) - torch.min(forth_recon))
+          forth_recon_pad = nn.functional.pad(forth_recon, pad=[4, 4, 4, 4], value=0.3)
 
-        all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
-        self.wandb_logger.log_image('test_imagesf/first_latent_image_z_' + str(self.sample),
-                                    [(images_grid.permute(1, 2, 0).numpy())])
+          fifth_recon = torch.sigmoid(pred_fifth).data
+          fifth_recon = (fifth_recon - torch.min(fifth_recon)).div(torch.max(fifth_recon) - torch.min(fifth_recon))
+          fifth_recon_pad = nn.functional.pad(fifth_recon, pad=[4, 4, 4, 4], value=0.3)
 
-        # log z changes second latents
-        second_latent_kl_images = create_kl_value_images(dim_wise_kld_second, mu_second, sd_second,
-                                                        72, background_color="black", text_color="white")
-        second_latent_corr_images = create_corr_images(l2)
-        second_latent_reg_images = create_corr_images(r2, "gray")
-        second_latent_feat_images = create_corr_images(l2_importance_matrix.T, "azure")
+          orig_pad = nn.functional.pad(val_imgs.cpu(), pad=[4, 4, 4, 4], value=0.5)
 
-        
+          recon_img = [orig_pad, first_recon_pad, second_recon_pad, third_recon_pad, forth_recon_pad, fifth_recon_pad]
 
-        print_images = []
-        z_size = mu_second.size(1)
-        for i in np.arange(0, z_size, 1):
-            for z_change in (np.arange(-3, 3, 0.5)):
-                z_copy = mu_second.clone().detach()
-                z_copy[0, i] = z_change
-                with torch.no_grad():
-                    pred = pl_module.decoder_second_latent(z_copy.to(pl_module.device)).cpu()
-                sigm_pred = torch.sigmoid(pred).data
-                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                print_images.append(sigm_pred)
-            print_images.append(torch.from_numpy(second_latent_kl_images[i]))
-            print_images.append(torch.from_numpy(second_latent_corr_images[i]))
-            print_images.append(torch.from_numpy(second_latent_reg_images[i]))
-            print_images.append(torch.from_numpy(second_latent_feat_images[i]))
-            
+          print_orig_recon = torch.cat(recon_img, dim=0).cpu()
+          recon_image = make_grid(print_orig_recon, normalize=False, scale_each=True, nrow=1, pad_value=1)
+          recon_image = recon_image.permute(1, 2, 0)
+          # Log the images as wandb Image
+          self.wandb_logger.log_image('test_images/test_image_recon_' + str(self.samples_list[j]), [(recon_image.numpy())])
 
-        all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
-        self.wandb_logger.log_image('test_imagesf/second_latent_image_z_' + str(self.sample),
-                                    [(images_grid.permute(1, 2, 0).numpy())])
-        # log z changes third latents
-        third_latent_kl_images = create_kl_value_images(dim_wise_kld_third, mu_third, sd_third,
+          # log z changes first latents
+          sd_first = torch.from_numpy(logvar1).div(2).exp()
+          sd_second = torch.from_numpy(logvar2).div(2).exp()
+          sd_third = torch.from_numpy(logvar3).div(2).exp()
+          sd_forth = torch.from_numpy(logvar4).div(2).exp()
+          sd_fiifth = torch.from_numpy(logvar5).div(2).exp()
+          
+
+          first_latent_kl_images = create_kl_value_images(kl1, mu1, sd_first,
                                                           72, background_color="black", text_color="white")
-        third_latent_corr_images = create_corr_images(l3)
-        third_latent_reg_images = create_corr_images(r3, "gray")
-        third_latent_feat_images = create_corr_images(l3_importance_matrix.T, "azure")
-        
-        print_images = []
-        z_size = mu_third.size(1)
-        for i in np.arange(0, z_size, 1):
-            for z_change in (np.arange(-3, 3, 0.5)):
-                z_copy = mu_third.clone().detach()
-                z_copy[0, i] = z_change
-                with torch.no_grad():
-                    pred = pl_module.decoder_third_latent(z_copy.to(pl_module.device)).cpu()
-                sigm_pred = torch.sigmoid(pred).data
-                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                print_images.append(sigm_pred)
-            print_images.append(torch.from_numpy(third_latent_kl_images[i]))
-            print_images.append(torch.from_numpy(third_latent_corr_images[i]))
-            print_images.append(torch.from_numpy(third_latent_reg_images[i]))
-            print_images.append(torch.from_numpy(third_latent_feat_images[i]))
-            
-        all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
-        self.wandb_logger.log_image('test_imagesf/third_latent_image_z_' + str(self.sample),
-                                    [(images_grid.permute(1, 2, 0).numpy())])
+          first_latent_corr_images = create_corr_images(l1)
+          first_latent_reg_images = create_corr_images(r1, "gray")
+          first_latent_feat_images = create_corr_images(l1_importance_matrix.T, "azure")
+          
 
-        # log z changes forth latents
-        forth_latent_kl_images = create_kl_value_images(dim_wise_kld_forth, mu_forth, sd_forth,
+          print_images = []
+          z_size = mu_first.size(1)
+          for i in (-kl1).argsort():
+              for z_change in (np.arange(-3, 3, 0.5)):
+                  z_copy = mu_first.clone().detach()
+                  z_copy[0, i] = z_change
+                  with torch.no_grad():
+                      pred = pl_module.decoder_first_latent(z_copy.to(pl_module.device)).cpu()
+                  sigm_pred = torch.sigmoid(pred).data
+                  sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+                  sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
+                  print_images.append(sigm_pred)
+              print_images.append(torch.from_numpy(first_latent_kl_images[i]))
+
+              print_images.append(torch.from_numpy(first_latent_corr_images[i]))
+              print_images.append(torch.from_numpy(first_latent_reg_images[i]))
+              print_images.append(torch.from_numpy(first_latent_feat_images[i]))
+
+          all_images = torch.cat(print_images, dim=0).cpu().detach()
+  
+          images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+          self.wandb_logger.log_image('test_imagesf/first_latent_image_z_' + str(self.samples_list[j]),
+                                      [(images_grid.permute(1, 2, 0).numpy())])
+
+          # log z changes second latents
+          second_latent_kl_images = create_kl_value_images(kl2, mu2, sd_second,
                                                           72, background_color="black", text_color="white")
-        forth_latent_corr_images = create_corr_images(l4)
-        forth_latent_reg_images = create_corr_images(r4, "gray")
-        forth_latent_feat_images = create_corr_images(l4_importance_matrix.T, "azure")
-        
-        print_images = []
-        z_size = mu_forth.size(1)
-        for i in np.arange(0, z_size, 1):
-            for z_change in (np.arange(-3, 3, 0.5)):
-                z_copy = mu_forth.clone().detach()
-                z_copy[0, i] = z_change
-                with torch.no_grad():
-                    pred = pl_module.decoder_forth_latent(z_copy.to(pl_module.device)).cpu()
-                sigm_pred = torch.sigmoid(pred).data
-                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                print_images.append(sigm_pred)
-            print_images.append(torch.from_numpy(forth_latent_kl_images[i]))
-            print_images.append(torch.from_numpy(forth_latent_corr_images[i]))
-            print_images.append(torch.from_numpy(forth_latent_reg_images[i]))
-            print_images.append(torch.from_numpy(forth_latent_feat_images[i]))
+          second_latent_corr_images = create_corr_images(l2)
+          second_latent_reg_images = create_corr_images(r2, "gray")
+          second_latent_feat_images = create_corr_images(l2_importance_matrix.T, "azure")
 
-        all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
-        self.wandb_logger.log_image('test_imagesf/forth_latent_image_z_' + str(self.sample),
-                                    [(images_grid.permute(1, 2, 0).numpy())])
+          
+          print_images = []
+          z_size = mu_second.size(1)
+          for i in (-kl2).argsort():
+              for z_change in (np.arange(-3, 3, 0.5)):
+                  z_copy = mu_second.clone().detach()
+                  z_copy[0, i] = z_change
+                  with torch.no_grad():
+                      pred = pl_module.decoder_second_latent(z_copy.to(pl_module.device)).cpu()
+                  sigm_pred = torch.sigmoid(pred).data
+                  sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+                  sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
+                  print_images.append(sigm_pred)
+              print_images.append(torch.from_numpy(second_latent_kl_images[i]))
+              print_images.append(torch.from_numpy(second_latent_corr_images[i]))
+              print_images.append(torch.from_numpy(second_latent_reg_images[i]))
+              print_images.append(torch.from_numpy(second_latent_feat_images[i]))
+              
+          all_images = torch.cat(print_images, dim=0).cpu().detach()
 
-        # log z changes fifth latents
-        fifth_latent_kl_images = create_kl_value_images(dim_wise_kld_fifth, mu_fifth, sd_fifth,
-                                                          72, background_color="black", text_color="white")
-        fifth_latent_corr_images = create_corr_images(l5)
-        fifth_latent_reg_images = create_corr_images(r5, "gray")
-        fifth_latent_feat_images = create_corr_images(l5_importance_matrix.T, "azure")
-        
-        print_images = []
-        z_size = mu_fifth.size(1)
-        for i in np.arange(0, z_size, 1):
-            for z_change in (np.arange(-3, 3, 0.5)):
-                z_copy = mu_fifth.clone().detach()
-                z_copy[0, i] = z_change
-                with torch.no_grad():
-                    pred = pl_module.decoder_fifth_latent(z_copy.to(pl_module.device)).cpu()
-                sigm_pred = torch.sigmoid(pred).data
-                sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
-                sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
-                print_images.append(sigm_pred)
-            print_images.append(torch.from_numpy(fifth_latent_kl_images[i]))
-            print_images.append(torch.from_numpy(fifth_latent_corr_images[i]))
-            print_images.append(torch.from_numpy(fifth_latent_reg_images[i]))
-            print_images.append(torch.from_numpy(fifth_latent_feat_images[i]))
-            
-        all_images = torch.cat(print_images, dim=0).cpu()
-        images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
-        self.wandb_logger.log_image('test_imagesf/fifth_latent_image_z_' + str(self.sample),
-                                    [(images_grid.permute(1, 2, 0).numpy())])
+          images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+          self.wandb_logger.log_image('test_imagesf/second_latent_image_z_' + str(self.samples_list[j]),
+                                      [(images_grid.permute(1, 2, 0).numpy())])
+          # log z changes third latents
+          third_latent_kl_images = create_kl_value_images(kl3, mu3, sd_third,
+                                                            72, background_color="black", text_color="white")
+          third_latent_corr_images = create_corr_images(l3)
+          third_latent_reg_images = create_corr_images(r3, "gray")
+          third_latent_feat_images = create_corr_images(l3_importance_matrix.T, "azure")
+          
+          print_images = []
+          z_size = mu_third.size(1)
+          for i in  (-kl3).argsort():
+              for z_change in (np.arange(-3, 3, 0.5)):
+                  z_copy = mu_third.clone().detach()
+                  z_copy[0, i] = z_change
+                  with torch.no_grad():
+                      pred = pl_module.decoder_third_latent(z_copy.to(pl_module.device)).cpu()
+                  sigm_pred = torch.sigmoid(pred).data
+                  sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+                  sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
+                  print_images.append(sigm_pred)
+              print_images.append(torch.from_numpy(third_latent_kl_images[i]))
+              print_images.append(torch.from_numpy(third_latent_corr_images[i]))
+              print_images.append(torch.from_numpy(third_latent_reg_images[i]))
+              print_images.append(torch.from_numpy(third_latent_feat_images[i]))
+              
+          all_images = torch.cat(print_images, dim=0).cpu().detach()
+
+          images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+          self.wandb_logger.log_image('test_imagesf/third_latent_image_z_' + str(self.samples_list[j]),
+                                      [(images_grid.permute(1, 2, 0).numpy())])
+
+          # log z changes forth latents
+          forth_latent_kl_images = create_kl_value_images(kl4, mu4, sd_forth,
+                                                            72, background_color="black", text_color="white")
+          forth_latent_corr_images = create_corr_images(l4)
+          forth_latent_reg_images = create_corr_images(r4, "gray")
+          forth_latent_feat_images = create_corr_images(l4_importance_matrix.T, "azure")
+          
+          print_images = []
+          z_size = mu_forth.size(1)
+          for i in  (-kl4).argsort():
+              for z_change in (np.arange(-3, 3, 0.5)):
+                  z_copy = mu_forth.clone().detach()
+                  z_copy[0, i] = z_change
+                  with torch.no_grad():
+                      pred = pl_module.decoder_forth_latent(z_copy.to(pl_module.device)).cpu()
+                  sigm_pred = torch.sigmoid(pred).data
+                  sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+                  sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
+                  print_images.append(sigm_pred)
+              print_images.append(torch.from_numpy(forth_latent_kl_images[i]))
+              print_images.append(torch.from_numpy(forth_latent_corr_images[i]))
+              print_images.append(torch.from_numpy(forth_latent_reg_images[i]))
+              print_images.append(torch.from_numpy(forth_latent_feat_images[i]))
+
+          all_images = torch.cat(print_images, dim=0).cpu().detach()
+
+
+          images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+          self.wandb_logger.log_image('test_imagesf/forth_latent_image_z_' + str(self.samples_list[j]),
+                                      [(images_grid.permute(1, 2, 0).numpy())])
+
+          # log z changes fifth latents
+          fifth_latent_kl_images = create_kl_value_images(kl5, mu5, sd_fifth,
+                                                            72, background_color="black", text_color="white")
+          fifth_latent_corr_images = create_corr_images(l5)
+          fifth_latent_reg_images = create_corr_images(r5, "gray")
+          fifth_latent_feat_images = create_corr_images(l5_importance_matrix.T, "azure")
+          
+          print_images = []
+          z_size = mu_fifth.size(1)
+          for i in (-kl5).argsort():
+              for z_change in (np.arange(-3, 3, 0.5)):
+                  z_copy = mu_fifth.clone().detach()
+                  z_copy[0, i] = z_change
+                  with torch.no_grad():
+                      pred = pl_module.decoder_fifth_latent(z_copy.to(pl_module.device)).cpu()
+                  sigm_pred = torch.sigmoid(pred).data
+                  sigm_pred = (sigm_pred - torch.min(sigm_pred)).div(torch.max(sigm_pred) - torch.min(sigm_pred))
+                  sigm_pred = nn.functional.pad(sigm_pred.cpu(), pad=[4, 4, 4, 4], value=0.5)
+                  print_images.append(sigm_pred)
+              print_images.append(torch.from_numpy(fifth_latent_kl_images[i]))
+              print_images.append(torch.from_numpy(fifth_latent_corr_images[i]))
+              print_images.append(torch.from_numpy(fifth_latent_reg_images[i]))
+              print_images.append(torch.from_numpy(fifth_latent_feat_images[i]))
+              
+          all_images = torch.cat(print_images, dim=0).cpu().detach()
+      
+          images_grid = make_grid(all_images, normalize=False, scale_each=True, nrow=16, pad_value=1)
+          self.wandb_logger.log_image('test_imagesf/fifth_latent_image_z_' + str(self.samples_list[j]),
+                                      [(images_grid.permute(1, 2, 0).numpy())])
 
 
         pl_module.train()
@@ -2061,7 +1787,7 @@ class TestImagePredictionLoggerOneLevel(Callback):
 
 
     def on_test_epoch_end(self, trainer, pl_module):
-        l1 = get_all_latent_correlation1(pl_module.gen_params, self.ds_t, pl_module)
+        l1 = get_all_latent_correlation(pl_module.gen_params, self.ds_t, pl_module)
         r1 = get_all_latent_multinomial_regr1(pl_module.gen_params, self.ds_t, pl_module)
         self.wandb_logger.log_table(key="test/first_latents_reg", columns=pl_module.gen_params, data=r1.T)
         
@@ -2123,10 +1849,6 @@ class TestImagePredictionLoggerOneLevel(Callback):
         first_latent_corr_images = create_corr_images(l1)
         first_latent_reg_images = create_corr_images(r1, "gray")
         first_latent_feat_images = create_corr_images(l1_importance_matrix.T, "azure")
-        
-        
-        # print('L1 shape: ', l1.shape)
-        # print('first_latent_corr_images: ', str(len(first_latent_corr_images)))
 
         print_images = []
         z_size = mu_first.size(1)
@@ -2163,9 +1885,7 @@ class get_first_images_mu_logger(Callback):
         self.epoch_count = 0
 
     def on_train_epoch_end(self, trainer, pl_module):
-        # Bring the tensors to CPU
         self.epoch_count += 1
-        # print('test epoch count', self.epoch_count, 'div 10', self.epoch_count%10==0)
 
         if self.epoch_count % 50 == 1:
             pl_module.eval()

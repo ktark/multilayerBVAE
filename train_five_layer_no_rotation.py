@@ -20,8 +20,12 @@ def main(hparams):
     pl.seed_everything(int(hparams.seed), workers=True)
     print(hparams)
 
-    ds = BoxHead(dataset=hparams.dataset)
-    ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
+##    ds = BoxHead(dataset=hparams.dataset)
+##    ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
+    
+    ds = BoxHeadNoRotation(dataset=hparams.dataset)
+    ds_t = BoxHeadNoRotationWithLabels(dataset=hparams.dataset) #for testing only
+    
 
     vae = VAEFiveLevel(nc=3, decoder_dist='gaussian', latent_dims=hparams.latent_dims,
                gamma=float(hparams.gamma), l1_regularization = float(hparams.l1), l2_regularization = float(hparams.l2),
@@ -53,19 +57,17 @@ def main(hparams):
 
     #mu_val_logger = get_first_images_mu_logger(ds, wandb_logger)
 
-    test_logger = TestImagePredictionLoggerFiveLevel(sample=sample_ids[1], ds=ds, ds_t=ds_t, wandb_logger=wandb_logger)
+    test_logger = TestImagePredictionLoggerFiveLevel(samples_list=sample_ids, ds=ds, ds_t=ds_t, wandb_logger=wandb_logger)
 
     wandb_logger.watch(vae, log_freq=10000)  # log network topology and weights
 
-    trainer = pl.Trainer(gpus=hparams.gpus,  max_steps=int(hparams.max_steps), log_every_n_steps=100,
+    trainer = pl.Trainer(gpus=hparams.gpus,  max_steps=int(hparams.max_steps), log_every_n_steps=10000,
                          enable_progress_bar = False,
                          logger=wandb_logger, callbacks=[ModelSummary(max_depth=-1),
-                                                         epoch_end_example_image_S,
-                                                         epoch_end_example_image_S2,
-                                                         epoch_end_example_image_S3,
-                                                         SaveFinalModelLogger(),
-                                                         SaveModelEvery50EpochLogger(),
-                                                         test_logger
+                                                        #  epoch_end_example_image_S,
+                                                        #  epoch_end_example_image_S2,
+                                                        #  epoch_end_example_image_S3,
+                                                        test_logger
                                                          ])
     trainer.fit(vae, ds_dl)
     trainer.test(vae, ds_test)

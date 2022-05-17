@@ -175,7 +175,7 @@ class BoxHeadNoRotation(Dataset):
         return len(self.train_data)
 
 
-
+import statistics
 class BoxHeadNoRotationWithLabels(Dataset):
     def __init__(self, dataset='boxheadsimple2'):
         # read boxhead datasets from hdf5 and make a np array

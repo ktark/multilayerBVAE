@@ -1,6 +1,5 @@
 from pytorch_lightning import LightningModule
 from pytorch_lightning.loggers import WandbLogger
-
 from src.utils import *
 from src.modules import *
 import wandb
@@ -9,23 +8,17 @@ from src.architectures import *
 from src.callbacks import *
 from src.utils import seed_everything
 from argparse import ArgumentParser
-
 import os
 
 
 def main(hparams):
-    # os.environ['WANDB_API_KEY'] = '536da542ee9b110c15555f219ff08d8d3fbc9ffb0'
     seed_everything(int(hparams.seed))
     wandb.login()
     pl.seed_everything(int(hparams.seed), workers=True)
     print(hparams)
 
-##    ds = BoxHead(dataset=hparams.dataset)
-##    ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
-    
-    ds = BoxHeadNoRotation(dataset=hparams.dataset)
-    ds_t = BoxHeadNoRotationWithLabels(dataset=hparams.dataset) #for testing only
-    
+    ds = BoxHead(dataset=hparams.dataset)
+    ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
 
     vae = VAEFiveLevel(nc=3, decoder_dist='gaussian', latent_dims=hparams.latent_dims,
                gamma=float(hparams.gamma), l1_regularization = float(hparams.l1), l2_regularization = float(hparams.l2),
@@ -55,8 +48,6 @@ def main(hparams):
     epoch_end_example_image_S2 = ImagePredictionLoggerFiveLevel(sample=sample_ids[1], ds=ds, wandb_logger=wandb_logger)
     epoch_end_example_image_S3 = ImagePredictionLoggerFiveLevel(sample=sample_ids[2], ds=ds, wandb_logger=wandb_logger)
 
-    #mu_val_logger = get_first_images_mu_logger(ds, wandb_logger)
-
     test_logger = TestImagePredictionLoggerFiveLevel(sample=sample_ids[1], ds=ds, ds_t=ds_t, wandb_logger=wandb_logger)
 
     wandb_logger.watch(vae, log_freq=10000)  # log network topology and weights
@@ -67,8 +58,6 @@ def main(hparams):
                                                          epoch_end_example_image_S,
                                                          epoch_end_example_image_S2,
                                                          epoch_end_example_image_S3,
-                                                         SaveFinalModelLogger(),
-                                                         SaveModelEvery50EpochLogger(),
                                                          test_logger
                                                          ])
     trainer.fit(vae, ds_dl)
@@ -81,16 +70,15 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--gpus", default=-1)
     parser.add_argument("--max_steps", default=1500000)
-    parser.add_argument("--gamma", default=1.0)  # beta from BVAE
+    parser.add_argument("--gamma", default=1.0) 
     parser.add_argument("--l1", default=1.0)  # L1 loss coef
     parser.add_argument("--l2", default=1.0)  # L2 loss coef
-    parser.add_argument("--dataset", default="boxhead2")  # dataset
-    parser.add_argument("--seed", default=2)  # dataset
-    parser.add_argument("--lr", default=0.0003)  # dataset
-
+    parser.add_argument("--dataset", default="boxhead2") 
+    parser.add_argument("--seed", default=2)  
+    parser.add_argument("--lr", default=0.0003)  
     parser.add_argument("--latent_dims", nargs="*", type=int,
                         default=[500,400,300, 200, 100])
-    parser.add_argument("--name", default="")  # dataset
+    parser.add_argument("--name", default="")  
 
     args = parser.parse_args()
 

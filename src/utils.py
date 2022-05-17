@@ -5,6 +5,14 @@ import torch
 import torch.nn.init as init
 import numpy as np
 from scipy import stats
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+from matplotlib.ticker import FormatStrFormatter
 
 
 def get_subgroup_indices(hier_groups, latent_dim):
@@ -60,13 +68,6 @@ def kl_divergence(mu, logvar):
     batch_size = mu.size(0)
     assert batch_size != 0
 
-    # mu B, len(latent_vector)
-
-    # if mu.data.ndimension() == 4:
-    #     mu = mu.view(mu.size(0), mu.size(1))
-    # if logvar.data.ndimension() == 4:
-    #     logvar = logvar.view(logvar.size(0), logvar.size(1)) #Batch size,
-
     klds = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()) #shape (B, latent vector)
     total_kld = klds.sum(1).mean(0, True) #latent vector, mean over B
     dimension_wise_kld = klds.mean(0)
@@ -111,9 +112,6 @@ def normal_init(m, mean, std):
 
 
 def latent_layer_reconstruction(pl_module, batch_size):
-    # Bring the tensors to CPU
-    #pl_module.eval()
-    # pl_module.cuda()
     switch_batchnorm(pl_module, turn_on=False)
     #zero_image = torch.zeros((batch_size, 1, 64, 64)).float().cuda()
     level0 = pl_module.latent_dim_level0
@@ -172,44 +170,21 @@ def latent_layer_reconstruction(pl_module, batch_size):
     )
     switch_batchnorm(pl_module, turn_on=True)
 
-            # print(recon_loss_between_layers)
-
-            # imshow(make_grid(reconst_z1_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
-            # imshow(make_grid(reconst_z0_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
-            # show()
-    #pl_module.train()
     return value #torch.FloatTensor(recon_loss_between_layers_list).sum()
 
 
 
 def latent_layer_reconstruction_images(pl_module, images, images_hier, mu, mu_hier):
-    # Bring the tensors to CPU
-    #pl_module.eval()
-    # pl_module.cuda()
-    #zero_image = torch.zeros((batch_size, 1, 64, 64)).float().cuda()
-    #level0 = pl_module.latent_dim_level0
-
-    #stop batchnorm
-    #switch_batchnorm(pl_module, turn_on=False)
 
     level1 = pl_module.latent_dim_level1
     batch_size = images.size(dim=0)
 
-    # 0 latent features
-    # level0_zero_img = torch.zeros((batch_size, level0)).cuda()
-    # level1_zero_img = torch.zeros((batch_size, level1)).cuda()
-
-    #with torch.no_grad():
-    # pred0_level0 = pl_module.decoder(level0_zero_img)
-    # pred0_level1 = pl_module.decoder_level1(level1_zero_img)
-    #use mu directly for creating images without noise
     x_recon_hier_mu = pl_module.decoder_level1(mu_hier).view(images.size())
     x_recon_mu = pl_module.decoder(mu).view(images.size())
 
     # "no info" predictions
     zero_pred_level0 = torch.sigmoid(x_recon_mu)
     zero_pred_level1 = torch.sigmoid(x_recon_hier_mu)
-    # return zero_pred_level0, zero_pred_level1
 
     # which latent feature vales to check
     check_levels = [-1, 1]
@@ -251,15 +226,7 @@ def latent_layer_reconstruction_images(pl_module, images, images_hier, mu, mu_hi
         logs,
         on_step=True, on_epoch=False, prog_bar=False, logger=True
     )
-    # stop batchnorm
-    #switch_batchnorm(pl_module, turn_on=True)
 
-            # print(recon_loss_between_layers)
-
-            # imshow(make_grid(reconst_z1_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
-            # imshow(make_grid(reconst_z0_sigm.detach().cpu(), normalize=True).permute(1, 2, 0).numpy())
-            # show()
-    #pl_module.train()
     return value #torch.FloatTensor(recon_loss_between_layers_list).sum()
 
 
@@ -591,8 +558,6 @@ def get_visualization_latent_border(trainer, pl_module):
 
 
 
-from matplotlib.ticker import FormatStrFormatter
-
 def get_scatter_images(pl_module, mu, mu_hier):
     images_list = []
     #  l0_indices = pl_module.encoder.mu_indices[idx]
@@ -681,4 +646,28 @@ def get_first_images_mu(trainer, pl_module, ds, logger):
         data_row.extend(mu_l0.flatten().detach().cpu().numpy())  # , mu_l1])
         full_data.append(data_row)
     logger.log_table(key="validation_samples", columns=columns, data=full_data)
+
+def get_DCI(input_latents, np_dat):
+    X_train, X_test, y_train, y_test = train_test_split(input_latents, np_dat, test_size=0.1, train_size=0.1, random_state=42)
+
+    imp_matrix = compute_importance_gbt(np.array(X_train).T, np.array(y_train).T, np.array(X_test).T, np.array(y_test).T)
+
+    importance_matrix, train_loss, test_loss = imp_matrix
+    child_factors = [3,4,5,6]
+    parent_factor = [9]
+    overall_factors = [i for i in range(importance_matrix.shape[-1]) if not i in child_factors]
+    child_latents = np.max(importance_matrix[:,overall_factors],axis=-1)<=np.max(importance_matrix[:,child_factors],axis=-1)
+    child_and_parent_latents = np.max(importance_matrix[:,overall_factors],axis=-1)<=np.max(importance_matrix[:,child_factors+parent_factor],axis=-1)
+    overall_latents = np.logical_not(child_latents)
+
+    high_level_disent = disentanglement(importance_matrix[overall_latents][:, overall_factors])
+    child_level_disent = disentanglement(importance_matrix[child_latents][:, child_factors])
+    child_and_parent_level_disent = disentanglement(importance_matrix[child_and_parent_latents][:, child_factors+parent_factor])
+    total_disent = disentanglement(importance_matrix[:][:,:])
+
+    high_level_compl = completeness(importance_matrix[overall_latents][:, overall_factors])
+    child_level_compl = completeness(importance_matrix[child_latents][:, child_factors])
+    child_and_parent_level_compl = completeness(importance_matrix[child_and_parent_latents][:, child_factors+parent_factor])
+    total_compl = completeness(importance_matrix[:][:,:])
+    return high_level_disent, child_level_disent, child_and_parent_level_disent, total_disent, high_level_compl,  child_level_compl, child_and_parent_level_compl, total_compl, importance_matrix, train_loss, test_loss
 

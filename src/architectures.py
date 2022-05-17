@@ -1585,40 +1585,7 @@ class VAEFiveLevel(pl.LightningModule):
             'train/l2_fifth': l2_loss_third_latents,
 
         }
-        for idx, val in enumerate(dim_wise_kld_first):
-            logs['train_kl/kl_first_' + str(idx)] = val
-        self.log_dict(
-            logs,
-            on_step=True, on_epoch=False, prog_bar=False, logger=True
-        )
 
-        for idx, val in enumerate(dim_wise_kld_second):
-            logs['train_kl/kl_second_' + str(idx)] = val
-        self.log_dict(
-            logs,
-            on_step=True, on_epoch=False, prog_bar=False, logger=True
-        )
-
-        for idx, val in enumerate(dim_wise_kld_third):
-            logs['train_kl/kl_third_' + str(idx)] = val
-        self.log_dict(
-            logs,
-            on_step=True, on_epoch=False, prog_bar=False, logger=True
-        )
-
-        for idx, val in enumerate(dim_wise_kld_forth):
-            logs['train_kl/kl_forth_' + str(idx)] = val
-        self.log_dict(
-            logs,
-            on_step=True, on_epoch=False, prog_bar=False, logger=True
-        )
-
-        for idx, val in enumerate(dim_wise_kld_fifth):
-            logs['train_kl/kl_fifth_' + str(idx)] = val
-        self.log_dict(
-            logs,
-            on_step=True, on_epoch=False, prog_bar=False, logger=True
-        )
 
         opt.step()
         return beta_vae_loss
@@ -1788,12 +1755,7 @@ class VAEOneLevel(pl.LightningModule):
             'train/recon_first': recon_loss_first,
             'train/iter': self.global_iter
         }
-        for idx, val in enumerate(dim_wise_kld_first):
-            logs['train_kl/kl_first_' + str(idx)] = val
-        self.log_dict(
-            logs,
-            on_step=True, on_epoch=False, prog_bar=False, logger=True
-        )
+        
 
         opt.step()
         return beta_vae_loss

@@ -10,11 +10,7 @@ from src.callbacks import *
 from src.utils import seed_everything
 from argparse import ArgumentParser
 
-import os
-
-
 def main(hparams):
-    # os.environ['WANDB_API_KEY'] = '536da542ee9b110c15555f219ff08d8d3fbc9ffb0'
     seed_everything(int(hparams.seed))
     wandb.login()
     pl.seed_everything(int(hparams.seed), workers=True)
@@ -38,7 +34,6 @@ def main(hparams):
     ds_dl = DataLoader(ds, batch_size=64, shuffle=True, num_workers=8, persistent_workers=True)
 
 
-
     wandb_logger = WandbLogger(
         name=f'BVAE - test image every epoch: ds {hparams.dataset} | '
              f'gamma/betaVAE {str(hparams.gamma)} | '
@@ -49,7 +44,6 @@ def main(hparams):
              f'repar: {str(hparams.reparameters_coef)}',
         project='thesis', job_type='train', log_model=False)
 
-    # wandb_logger.watch(vae, log_freq=10000)  # log network topology and weights
     if hparams.dataset == "dsprites":
         sample_ids = [125140, 333500, 578560]
     else:
@@ -59,8 +53,6 @@ def main(hparams):
     epoch_end_example_image_S = ImagePredictionLogger2(sample=sample_ids[0], ds=ds, wandb_logger=wandb_logger)  # Square
     epoch_end_example_image_S2 = ImagePredictionLogger2(sample=sample_ids[1], ds=ds, wandb_logger=wandb_logger)  # Ellipse
     epoch_end_example_image_S3 = ImagePredictionLogger2(sample=sample_ids[2], ds=ds, wandb_logger=wandb_logger)  # Ellipse
-
-    #mu_val_logger = get_first_images_mu_logger(ds, wandb_logger)
 
     wandb_logger.watch(vae, log_freq=1000)  # log network topology and weights
 
@@ -88,7 +80,7 @@ if __name__ == "__main__":
     parser.add_argument("--C_stop_iter", default=1)  # C_stop iteration
     parser.add_argument("--latent_dim", default=12)  # latent_dim
     parser.add_argument("--dataset", default="boxhead2")  # dataset
-    parser.add_argument("--seed", default=2)  # dataset
+    parser.add_argument("--seed", default=2)  
     parser.add_argument("--reparameters_coef", default=1.0)
 
     args = parser.parse_args()

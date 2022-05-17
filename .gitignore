@@ -1,0 +1,15 @@
+sbatchdataset/
+wandb*
+thesis*
+thesis_2*
+slurm*
+model_ep*
+dataset/
+wandb/
+thesis/
+thesis_2/
+slurm/
+dataset/
+src/__pycache__
+backup/
+.idea/
