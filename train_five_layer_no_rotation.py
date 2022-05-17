@@ -14,15 +14,11 @@ import os
 
 
 def main(hparams):
-    # os.environ['WANDB_API_KEY'] = '536da542ee9b110c15555f219ff08d8d3fbc9ffb0'
     seed_everything(int(hparams.seed))
     wandb.login()
     pl.seed_everything(int(hparams.seed), workers=True)
     print(hparams)
-
-##    ds = BoxHead(dataset=hparams.dataset)
-##    ds_t = BoxHeadWithLabels(dataset=hparams.dataset) #for testing only
-    
+   
     ds = BoxHeadNoRotation(dataset=hparams.dataset)
     ds_t = BoxHeadNoRotationWithLabels(dataset=hparams.dataset) #for testing only
     
@@ -47,7 +43,6 @@ def main(hparams):
              f'seed: {str(hparams.seed)}',
         project='thesis_2', job_type='train', log_model=True)
 
-    # wandb_logger.watch(vae, log_freq=10000)  # log network topology and weights
 
     sample_ids = [15, 4, 400]
 
@@ -55,7 +50,6 @@ def main(hparams):
     epoch_end_example_image_S2 = ImagePredictionLoggerFiveLevel(sample=sample_ids[1], ds=ds, wandb_logger=wandb_logger)
     epoch_end_example_image_S3 = ImagePredictionLoggerFiveLevel(sample=sample_ids[2], ds=ds, wandb_logger=wandb_logger)
 
-    #mu_val_logger = get_first_images_mu_logger(ds, wandb_logger)
 
     test_logger = TestImagePredictionLoggerFiveLevel(samples_list=sample_ids, ds=ds, ds_t=ds_t, wandb_logger=wandb_logger)
 
@@ -64,9 +58,9 @@ def main(hparams):
     trainer = pl.Trainer(gpus=hparams.gpus,  max_steps=int(hparams.max_steps), log_every_n_steps=10000,
                          enable_progress_bar = False,
                          logger=wandb_logger, callbacks=[ModelSummary(max_depth=-1),
-                                                        #  epoch_end_example_image_S,
-                                                        #  epoch_end_example_image_S2,
-                                                        #  epoch_end_example_image_S3,
+                                                          epoch_end_example_image_S,
+                                                          epoch_end_example_image_S2,
+                                                          epoch_end_example_image_S3,
                                                         test_logger
                                                          ])
     trainer.fit(vae, ds_dl)
@@ -79,16 +73,15 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--gpus", default=-1)
     parser.add_argument("--max_steps", default=1500000)
-    parser.add_argument("--gamma", default=1.0)  # beta from BVAE
-    parser.add_argument("--l1", default=1.0)  # L1 loss coef
-    parser.add_argument("--l2", default=1.0)  # L2 loss coef
-    parser.add_argument("--dataset", default="boxhead2")  # dataset
-    parser.add_argument("--seed", default=2)  # dataset
-    parser.add_argument("--lr", default=0.0003)  # dataset
-
+    parser.add_argument("--gamma", default=1.0) 
+    parser.add_argument("--l1", default=1.0)  
+    parser.add_argument("--l2", default=1.0)  
+    parser.add_argument("--dataset", default="boxhead2") 
+    parser.add_argument("--seed", default=2)  
+    parser.add_argument("--lr", default=0.0003)  
     parser.add_argument("--latent_dims", nargs="*", type=int,
                         default=[500,400,300, 200, 100])
-    parser.add_argument("--name", default="")  # dataset
+    parser.add_argument("--name", default="") 
 
     args = parser.parse_args()
 
